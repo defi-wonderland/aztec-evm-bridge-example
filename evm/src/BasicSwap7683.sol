@@ -65,8 +65,6 @@ abstract contract BasicSwap7683 is Base7683 {
     error InvalidOrderId();
     error OrderFillExpired();
     error InvalidOrderDomain();
-    error InvalidDomain();
-    error InvalidSender();
 
     // ============ Modifiers ============
 
@@ -82,51 +80,6 @@ abstract contract BasicSwap7683 is Base7683 {
     // ============ External Functions ============
 
     // ============ Internal Functions ============
-
-    /**
-     * @dev Settles multiple orders by dispatching the settlement instructions.
-     * The proper status of all the orders (filled) is validated on the Base7683 before calling this function.
-     * It assumes that all orders were originated in the same originDomain so it uses the the one from the first one for
-     * dispatching the message, but if some order differs on the originDomain it can be re-settle later.
-     * @param _orderIds The IDs of the orders to settle.
-     * @param _ordersOriginData The original data of the orders.
-     * @param _ordersFillerData The filler data for the orders.
-     */
-    /*function _settleOrders(
-        bytes32[] calldata _orderIds,
-        bytes[] memory _ordersOriginData,
-        bytes[] memory _ordersFillerData
-    ) internal override {
-        // at this point we are sure all orders are filled, use the first order to get the originDomain
-        // if some order differs on the originDomain it can be re-settle later
-        _dispatchSettle(OrderEncoder.decode(_ordersOriginData[0]).originDomain, _orderIds, _ordersFillerData);
-    }*/
-
-    /**
-     * @dev Refunds multiple OnchainCrossChain orders by dispatching refund instructions.
-     * The proper status of all the orders (NOT filled and expired) is validated on the Base7683 before calling this
-     * function.
-     * It assumes that all orders were originated in the same originDomain so it uses the the one from the first one for
-     * dispatching the message, but if some order differs on the originDomain it can be re-refunded later.
-     * @param _orders The orders to refund.
-     * @param _orderIds The IDs of the orders to refund.
-     */
-    /*function _refundOrders(OnchainCrossChainOrder[] memory _orders, bytes32[] memory _orderIds) internal override {
-        _dispatchRefund(OrderEncoder.decode(_orders[0].orderData).originDomain, _orderIds);
-    }*/
-
-    /**
-     * @dev Refunds multiple GaslessCrossChain orders by dispatching refund instructions.
-     * The proper status of all the orders (NOT filled and expired) is validated on the Base7683 before calling this
-     * function.
-     * It assumes that all orders were originated in the same originDomain so it uses the the one from the first one for
-     * dispatching the message, but if some order differs on the originDomain it can be re-refunded later.
-     * @param _orders The orders to refund.
-     * @param _orderIds The IDs of the orders to refund.
-     */
-    /*function _refundOrders(GaslessCrossChainOrder[] memory _orders, bytes32[] memory _orderIds) internal override {
-        _dispatchRefund(OrderEncoder.decode(_orders[0].orderData).originDomain, _orderIds);
-    }*/
 
     /**
      * @dev Handles settling an individual order, should be called by the inheriting contract when receiving a setting
@@ -368,23 +321,4 @@ abstract contract BasicSwap7683 is Base7683 {
             IERC20(outputToken).safeTransferFrom(msg.sender, recipient, orderData.amountOut);
         }
     }
-
-    /**
-     * @dev Should be implemented by the messaging layer for dispatching a settlement instruction the remote domain
-     * where the orders where created.
-     * @param _originDomain The origin domain of the orders.
-     * @param _orderIds The IDs of the orders to settle.
-     * @param _ordersFillerData The filler data for the orders.
-     */
-    /*function _dispatchSettle(uint32 _originDomain, bytes32[] memory _orderIds, bytes[] memory _ordersFillerData)
-        internal
-        virtual;*/
-
-    /**
-     * @dev Should be implemented by the messaging layer for dispatching a refunding instruction the remote domain
-     * where the orders where created.
-     * @param _originDomain The origin domain of the orders.
-     * @param _orderIds The IDs of the orders to refund.
-     */
-    /*function _dispatchRefund(uint32 _originDomain, bytes32[] memory _orderIds) internal virtual;*/
 }

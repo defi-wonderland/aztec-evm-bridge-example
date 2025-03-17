@@ -235,74 +235,6 @@ abstract contract Base7683 is IOriginSettler, IDestinationSettler {
     }
 
     /**
-     * @notice Settles a batch of filled orders on the chain where the orders were opened.
-     * @dev Pays the filler the amount locked when the orders were opened.
-     * The settled status should not be changed here but rather on the origin chain. To allow the filler to retry in
-     * case some error occurs.
-     * Ensuring the order is eligible for settling in the origin chain is the responsibility of the caller.
-     * @param _orderIds An array of IDs for the orders to settle.
-     */
-    //function settle(bytes32[] calldata _orderIds) external payable {
-        /*bytes[] memory ordersOriginData = new bytes[](_orderIds.length);
-        bytes[] memory ordersFillerData = new bytes[](_orderIds.length);
-        for (uint256 i = 0; i < _orderIds.length; i += 1) {
-            // all orders must be FILLED
-            if (orderStatus[_orderIds[i]] != FILLED) revert InvalidOrderStatus();
-
-            ordersOriginData[i] = filledOrders[_orderIds[i]].originData;
-            ordersFillerData[i] = filledOrders[_orderIds[i]].fillerData;
-        }
-
-        _settleOrders(_orderIds, ordersOriginData, ordersFillerData);
-
-        emit Settle(_orderIds, ordersFillerData);*/
-    //}
-
-    /**
-     * @notice Refunds a batch of expired GaslessCrossChainOrders on the chain where the orders were opened.
-     * The refunded status should not be changed here but rather on the origin chain. To allow the user to retry in
-     * case some error occurs.
-     * Ensuring the order is eligible for refunding in the origin chain is the responsibility of the caller.
-     * @param _orders An array of GaslessCrossChainOrders to refund.
-     */
-    //function refund(GaslessCrossChainOrder[] memory _orders) external payable {
-        /*bytes32[] memory orderIds = new bytes32[](_orders.length);
-        for (uint256 i = 0; i < _orders.length; i += 1) {
-            bytes32 orderId = _getOrderId(_orders[i]);
-            orderIds[i] = orderId;
-
-            if (orderStatus[orderId] != UNKNOWN) revert InvalidOrderStatus();
-            if (block.timestamp <= _orders[i].fillDeadline) revert OrderFillNotExpired();
-        }
-
-        _refundOrders(_orders, orderIds);
-
-        emit Refund(orderIds);*/
-    //}
-
-    /**
-     * @notice Refunds a batch of expired OnchainCrossChainOrder on the chain where the orders were opened.
-     * The refunded status should not be changed here but rather on the origin chain. To allow the user to retry in
-     * case some error occurs.
-     * Ensuring the order is eligible for refunding the origin chain is the responsibility of the caller.
-     * @param _orders An array of GaslessCrossChainOrders to refund.
-     */
-    function refund(OnchainCrossChainOrder[] memory _orders) external payable {
-        /*bytes32[] memory orderIds = new bytes32[](_orders.length);
-        for (uint256 i = 0; i < _orders.length; i += 1) {
-            bytes32 orderId = _getOrderId(_orders[i]);
-            orderIds[i] = orderId;
-
-            if (orderStatus[orderId] != UNKNOWN) revert InvalidOrderStatus();
-            if (block.timestamp <= _orders[i].fillDeadline) revert OrderFillNotExpired();
-        }
-
-        _refundOrders(_orders, orderIds);
-
-        emit Refund(orderIds);*/
-    }
-
-    /**
      * @notice Invalidates a nonce for the user calling the function.
      * @param _nonce The nonce to invalidate.
      */
@@ -437,35 +369,6 @@ abstract contract Base7683 is IOriginSettler, IDestinationSettler {
      * @param _fillerData Data provided by the filler, including preferences and additional information.
      */
     function _fillOrder(bytes32 _orderId, bytes calldata _originData, bytes calldata _fillerData) internal virtual;
-
-    /**
-     * @notice Settles a batch of orders using their origin and filler data.
-     * @dev To be implemented by the inheriting contract. Contains the specific logic for settlement.
-     * @param _orderIds An array of order IDs to settle.
-     * @param _ordersOriginData The origin data for the orders being settled.
-     * @param _ordersFillerData The filler data for the orders being settled.
-     */
-    /*function _settleOrders(
-        bytes32[] calldata _orderIds,
-        bytes[] memory _ordersOriginData,
-        bytes[] memory _ordersFillerData
-    ) internal virtual;*/
-
-    /**
-     * @notice Refunds a batch of OnchainCrossChainOrders.
-     * @dev To be implemented by the inheriting contract. Contains logic specific to refunds.
-     * @param _orders An array of OnchainCrossChainOrders to refund.
-     * @param _orderIds An array of IDs for the orders to refund.
-     */
-    // function _refundOrders(OnchainCrossChainOrder[] memory _orders, bytes32[] memory _orderIds) internal virtual;
-
-    /**
-     * @notice Refunds a batch of GaslessCrossChainOrders.
-     * @dev To be implemented by the inheriting contract. Contains logic specific to refunds.
-     * @param _orders An array of GaslessCrossChainOrders to refund.
-     * @param _orderIds An array of IDs for the orders to refund.
-     */
-    // function _refundOrders(GaslessCrossChainOrder[] memory _orders, bytes32[] memory _orderIds) internal virtual;
 
     /**
      * @notice Retrieves the local domain identifier.
