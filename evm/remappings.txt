@@ -1,0 +1,5 @@
+@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
+@hyperlane-xyz/=lib/hyperlane-monorepo/solidity/contracts
+@uniswap/permit2=lib/permit2
+@optimism/contracts=lib/optimism/packages/contracts-bedrock
+@aztec/contracts=lib/aztec-packages/l1-contracts/src
