@@ -61,7 +61,7 @@ abstract contract BasicSwap7683 is Base7683 {
     // ============ Errors ============
 
     error InvalidOrderType(bytes32 orderType);
-    error InvalidOriginDomain(uint32 originDomain);
+    error InvalidOriginDomain(uint256 originDomain);
     error InvalidOrderId();
     error OrderFillExpired();
     error InvalidOrderDomain();
