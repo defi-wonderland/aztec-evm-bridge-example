@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "aztec_gateway_7683",
+    "aztec-packages/noir-projects/noir-contracts/contracts/token_contract"
+]

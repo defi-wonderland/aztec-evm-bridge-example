@@ -13,3 +13,6 @@
 [submodule "evm/lib/aztec-packages"]
 	path = evm/lib/aztec-packages
 	url = https://github.com/AztecProtocol/aztec-packages
+[submodule "aztec/aztec-packages"]
+	path = aztec/aztec-packages
+	url = https://github.com/AztecProtocol/aztec-packages.git
