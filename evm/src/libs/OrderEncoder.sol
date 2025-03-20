@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.28;
 
+import {BytesReader} from "./BytesReader.sol";
+
 struct OrderData {
     bytes32 sender;
     bytes32 recipient;
@@ -17,8 +19,9 @@ struct OrderData {
 // bytes data;
 
 library OrderEncoder {
+    using BytesReader for bytes;
+
     error InvalidOrderLength();
-    error OutOfRange();
 
     bytes constant ORDER_DATA_TYPE = abi.encodePacked(
         "OrderData(",
@@ -65,40 +68,18 @@ library OrderEncoder {
     function decode(bytes memory orderBytes) internal pure returns (OrderData memory order) {
         require(orderBytes.length == 268, InvalidOrderLength());
 
-        order.sender = bytesToBytes32(orderBytes, 0);
-        order.recipient = bytesToBytes32(orderBytes, 32);
-        order.inputToken = bytesToBytes32(orderBytes, 64);
-        order.outputToken = bytesToBytes32(orderBytes, 96);
-        order.amountIn = bytesToUint256(orderBytes, 128);
-        order.amountOut = bytesToUint256(orderBytes, 160);
-        order.senderNonce = bytesToUint256(orderBytes, 192);
-        order.originDomain = bytesToUint32(orderBytes, 224);
-        order.destinationDomain = bytesToUint32(orderBytes, 228);
-        order.destinationSettler = bytesToBytes32(orderBytes, 232);
-        order.fillDeadline = bytesToUint32(orderBytes, 264);
+        order.sender = orderBytes.readBytes32(0);
+        order.recipient = orderBytes.readBytes32(32);
+        order.inputToken = orderBytes.readBytes32(64);
+        order.outputToken = orderBytes.readBytes32(96);
+        order.amountIn = orderBytes.readUint256(128);
+        order.amountOut = orderBytes.readUint256(160);
+        order.senderNonce = orderBytes.readUint256(192);
+        order.originDomain = orderBytes.readUint32(224);
+        order.destinationDomain = orderBytes.readUint32(228);
+        order.destinationSettler = orderBytes.readBytes32(232);
+        order.fillDeadline = orderBytes.readUint32(264);
 
         return order;
-    }
-
-    function bytesToBytes32(bytes memory data, uint256 offset) internal pure returns (bytes32 result) {
-        require(data.length >= offset + 32, OutOfRange());
-        assembly {
-            result := mload(add(data, add(32, offset)))
-        }
-    }
-
-    function bytesToUint256(bytes memory data, uint256 offset) internal pure returns (uint256 result) {
-        require(data.length >= offset + 32, OutOfRange());
-        assembly {
-            result := mload(add(data, add(32, offset)))
-        }
-    }
-
-    function bytesToUint32(bytes memory data, uint256 offset) internal pure returns (uint32 result) {
-        require(data.length >= offset + 4, OutOfRange());
-        assembly {
-            let word := mload(add(data, add(32, offset)))
-            result := shr(224, word) // shift down to get the top 4 bytes
-        }
     }
 }

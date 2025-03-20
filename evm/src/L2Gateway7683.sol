@@ -3,12 +3,14 @@ pragma solidity ^0.8.28;
 
 import {BasicSwap7683} from "./BasicSwap7683.sol";
 import {StateValidator} from "./libs/StateValidator.sol";
+import {BytesReader} from "./libs/BytesReader.sol";
 import {IL2Gateway7683} from "./interfaces/IL2Gateway7683.sol";
 
 contract L2Gateway7683 is IL2Gateway7683, BasicSwap7683 {
-    uint256 internal constant FORWARDER_SETTLE_ORDER_SLOTS = 0;
+    using BytesReader for bytes;
 
-    bytes32 private constant SETTLE_ORDER_TYPE = keccak256(abi.encodePacked("SETTLE_ORDER_TYPE"));
+    uint256 private constant FORWARDER_SETTLE_ORDER_SLOTS = 0;
+    bytes32 private constant SETTLE_ORDER_TYPE = sha256(abi.encodePacked("SETTLE_ORDER_TYPE"));
 
     address public immutable FORWARDER;
 
@@ -30,10 +32,9 @@ contract L2Gateway7683 is IL2Gateway7683, BasicSwap7683 {
         require(_bytesToBool(accountProofParams.storageValue), InvalidStorageValue());
         require(StateValidator.validateState(FORWARDER, stateProofParams, accountProofParams), InvalidState());
 
-        // NOTE: No need to use a nonce here since orderId already ensures uniqueness.
-        (uint256 targetChainId, bytes32 orderType, bytes32 orderId, bytes32 receiver) =
-            abi.decode(message, (uint256, bytes32, bytes32, bytes32));
-        require(targetChainId == block.chainid, InvalidTargetChainId());
+        bytes32 orderType = message.readBytes32(0);
+        bytes32 orderId = message.readBytes32(32);
+        bytes32 receiver = message.readBytes32(64);
         require(orderType == SETTLE_ORDER_TYPE, invalidOrderType());
 
         // NOTE: No need to check the sender, as the forwarder verifies
@@ -45,8 +46,8 @@ contract L2Gateway7683 is IL2Gateway7683, BasicSwap7683 {
         return keccak256(abi.encode(sha256(message), FORWARDER_SETTLE_ORDER_SLOTS));
     }
 
-    function _localDomain() internal view override returns (uint256) {
-        return block.chainid;
+    function _localDomain() internal view override returns (uint32) {
+        return uint32(block.chainid);
     }
 
     function _bytesToBool(bytes memory data) internal pure returns (bool res) {

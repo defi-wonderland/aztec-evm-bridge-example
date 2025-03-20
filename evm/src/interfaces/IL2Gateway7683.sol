@@ -6,7 +6,6 @@ interface IL2Gateway7683 {
     error InvalidStorageKey();
     error InvalidStorageValue();
     error InvalidState();
-    error InvalidTargetChainId();
     error invalidOrderType();
 
     function settle(

@@ -375,7 +375,7 @@ abstract contract Base7683 is IOriginSettler, IDestinationSettler {
      * @dev To be implemented by the inheriting contract. Specifies the logic to determine the local domain.
      * @return The local domain ID.
      */
-    function _localDomain() internal view virtual returns (uint256);
+    function _localDomain() internal view virtual returns (uint32);
 
     /**
      * @notice Computes the unique identifier for a GaslessCrossChainOrder.
