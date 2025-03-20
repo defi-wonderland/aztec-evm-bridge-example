@@ -1,22 +1,17 @@
-import {
-  AccountWallet,
-  createLogger,
-  Fr,
-  PXE,
-  waitForPXE,
-  createPXEClient,
-  Logger,
-  EthAddress,
-} from "@aztec/aztec.js"
+import { AccountWallet, createLogger, Fr, PXE, waitForPXE, createPXEClient, Logger, EthAddress } from "@aztec/aztec.js"
 import { getInitialTestAccountsWallets } from "@aztec/accounts/testing"
 import { spawn } from "child_process"
-import { SponsoredFeePaymentMethod } from "./utils/sponsored_fee_payment_method.js"
 import { L1FeeJuicePortalManager } from "@aztec/aztec.js"
 import { createEthereumChain, createL1Clients } from "@aztec/ethereum"
 import { encodePacked, hexToBytes, sha256 } from "viem"
+import { sha256ToField } from "@aztec/foundation/crypto"
 
-import {  AztecGateway7683Contract } from "../../artifacts/AztecGateway7683.js"
+import { AztecGateway7683Contract } from "../../artifacts/AztecGateway7683.js"
 import { TokenContract } from "../../artifacts/Token.js"
+
+const MNEMONIC = "test test test test test test test test test test test junk"
+const PORTAL_ADDRESS = EthAddress.ZERO
+const SETTLE_ORDER_TYPE = "191ea776bd6e0cd56a6d44ba4aea2fec468b4a0b4c1d880d4025929eeb615d0d"
 
 const setupSandbox = async () => {
   const { PXE_URL = "http://localhost:8080" } = process.env
@@ -27,14 +22,37 @@ const setupSandbox = async () => {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
+/*const getL2ToL1MessageLeaf = (
+  amount: bigint,
+  recipient: EthAddress,
+  l2Bridge: AztecAddress,
+  callerOnL1: EthAddress = EthAddress.ZERO,
+): Fr  => {
+  const content = sha256ToField([
+    Buffer.from(toFunctionSelector('withdraw(address,uint256,address)').substring(2), 'hex'),
+    recipient.toBuffer32(),
+    new Fr(amount).toBuffer(),
+    callerOnL1.toBuffer32(),
+  ]);
+  const leaf = sha256ToField([
+    l2Bridge.toBuffer(),
+    new Fr(1).toBuffer(), // aztec version
+    EthAddress.fromString(this.portal.address).toBuffer32() ?? Buffer.alloc(32, 0),
+    new Fr(this.publicClient.chain.id).toBuffer(), // chain id
+    content.toBuffer(),
+  ]);
+
+  return leaf;
+}*/
+
 describe("AztecGateway7683", () => {
   let pxe: PXE
   let wallets: AccountWallet[] = []
   let logger: Logger
   let sandboxInstance
-  let sponsoredPaymentMethod: SponsoredFeePaymentMethod
   let l1PortalManager: L1FeeJuicePortalManager
   let skipSandbox: boolean
+  let publicClient: any
 
   beforeAll(async () => {
     skipSandbox = process.env.SKIP_SANDBOX === "true"
@@ -50,15 +68,14 @@ describe("AztecGateway7683", () => {
     logger.info("Aztec-Starter tests running.")
 
     pxe = await setupSandbox()
-
     wallets = await getInitialTestAccountsWallets(pxe)
-    sponsoredPaymentMethod = await SponsoredFeePaymentMethod.new(pxe)
 
     const nodeInfo = await pxe.getNodeInfo()
     const chain = createEthereumChain(["http://localhost:8545"], nodeInfo.l1ChainId)
-    const DefaultMnemonic = "test test test test test test test test test test test junk"
-    const { publicClient, walletClient } = createL1Clients(chain.rpcUrls, DefaultMnemonic, chain.chainInfo)
-    l1PortalManager = await L1FeeJuicePortalManager.new(pxe, publicClient, walletClient, logger)
+
+    const clients = createL1Clients(chain.rpcUrls, MNEMONIC, chain.chainInfo)
+    publicClient = clients.publicClient
+    l1PortalManager = await L1FeeJuicePortalManager.new(pxe, publicClient, clients.walletClient, logger)
   })
 
   afterAll(async () => {
@@ -70,7 +87,7 @@ describe("AztecGateway7683", () => {
   it("should fill a public intent and send the settlement message to the forwarder via portal", async () => {
     const [admin, filler, recipient] = wallets
 
-    const gateway = await AztecGateway7683Contract.deploy(admin, EthAddress.ZERO).send().deployed()
+    const gateway = await AztecGateway7683Contract.deploy(admin, PORTAL_ADDRESS).send().deployed()
     const token = await TokenContract.deploy(
       admin,
       admin.getAddress(),
@@ -84,7 +101,7 @@ describe("AztecGateway7683", () => {
 
     const amount = 100n
     const nonce = new Fr(0)
-    
+
     const originData = encodePacked(
       [
         "bytes32",
@@ -136,5 +153,25 @@ describe("AztecGateway7683", () => {
       .methods.fill(Array.from(hexToBytes(orderId)), Array.from(hexToBytes(originData)), fillerData)
       .send()
       .wait()
+
+    const content = sha256ToField([
+      Buffer.from(SETTLE_ORDER_TYPE, "hex"),
+      Buffer.from(orderId.slice(2), "hex"),
+      Buffer.alloc(32, 0),
+    ])
+    const l2ToL1Message = sha256ToField([
+      gateway.address.toBuffer(),
+      new Fr(1).toBuffer(), // aztec version
+      PORTAL_ADDRESS.toBuffer32(),
+      new Fr(publicClient.chain.id).toBuffer(),
+      content.toBuffer(),
+    ])
+    const [l2ToL1MessageIndex, siblingPath] = await pxe.getL2ToL1MembershipWitness(
+      await pxe.getBlockNumber(),
+      l2ToL1Message,
+    )
+
+    expect(l2ToL1MessageIndex).toBe(0n)
+    expect(siblingPath.pathSize).toBe(1)
   })
 })
