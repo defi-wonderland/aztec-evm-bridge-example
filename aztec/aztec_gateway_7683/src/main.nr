@@ -105,7 +105,7 @@ pub contract AztecGateway7683 {
     #[public]
     #[internal]
     fn _trigger_settlement_via_portal_public(order_id: [u8; 32], recipient: [u8; 32]) {
-        let mut settlement_message_bytes: [u8; 86] = [0; 86];
+        let mut settlement_message_bytes: [u8; 96] = [0; 96];
 
         for i in 0..32 {
             settlement_message_bytes[i] = SETTLE_ORDER_TYPE[i]; // order_type
