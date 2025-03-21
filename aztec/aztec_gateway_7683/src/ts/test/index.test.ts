@@ -22,29 +22,6 @@ const setupSandbox = async () => {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-/*const getL2ToL1MessageLeaf = (
-  amount: bigint,
-  recipient: EthAddress,
-  l2Bridge: AztecAddress,
-  callerOnL1: EthAddress = EthAddress.ZERO,
-): Fr  => {
-  const content = sha256ToField([
-    Buffer.from(toFunctionSelector('withdraw(address,uint256,address)').substring(2), 'hex'),
-    recipient.toBuffer32(),
-    new Fr(amount).toBuffer(),
-    callerOnL1.toBuffer32(),
-  ]);
-  const leaf = sha256ToField([
-    l2Bridge.toBuffer(),
-    new Fr(1).toBuffer(), // aztec version
-    EthAddress.fromString(this.portal.address).toBuffer32() ?? Buffer.alloc(32, 0),
-    new Fr(this.publicClient.chain.id).toBuffer(), // chain id
-    content.toBuffer(),
-  ]);
-
-  return leaf;
-}*/
-
 describe("AztecGateway7683", () => {
   let pxe: PXE
   let wallets: AccountWallet[] = []
