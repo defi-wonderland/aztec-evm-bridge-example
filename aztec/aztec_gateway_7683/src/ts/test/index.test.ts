@@ -1,17 +1,32 @@
-import { AccountWallet, createLogger, Fr, PXE, waitForPXE, createPXEClient, Logger, EthAddress } from "@aztec/aztec.js"
+import {
+  AccountWallet,
+  createLogger,
+  Fr,
+  PXE,
+  waitForPXE,
+  createPXEClient,
+  Logger,
+  EthAddress,
+  UniqueNote,
+  AztecAddress,
+  deriveKeys,
+} from "@aztec/aztec.js"
 import { getInitialTestAccountsWallets } from "@aztec/accounts/testing"
 import { spawn } from "child_process"
 import { L1FeeJuicePortalManager } from "@aztec/aztec.js"
 import { createEthereumChain, createL1Clients } from "@aztec/ethereum"
 import { encodePacked, hexToBytes, sha256 } from "viem"
 import { sha256ToField } from "@aztec/foundation/crypto"
+import { computePartialAddress } from "@aztec/stdlib/contract"
 
 import { AztecGateway7683Contract } from "../../artifacts/AztecGateway7683.js"
 import { TokenContract } from "../../artifacts/Token.js"
 
 const MNEMONIC = "test test test test test test test test test test test junk"
 const PORTAL_ADDRESS = EthAddress.ZERO
-const SETTLE_ORDER_TYPE = "191ea776bd6e0cd56a6d44ba4aea2fec468b4a0b4c1d880d4025929eeb615d0d"
+const SETTLE_ORDER_TYPE = "641a96e8eac1cd4149d81ff37a7bc218889ff69c7ce4260d7a09ca9aea5cbabd"
+const SECRET = "0x2bb80d537b1da3e38bd30361aa855686bde0eacd7162fef6a25fe97bf527a25b" // sha256("secret")
+const SECRET_HASH = sha256(SECRET)
 
 const setupSandbox = async () => {
   const { PXE_URL = "http://localhost:8080" } = process.env
@@ -41,8 +56,7 @@ describe("AztecGateway7683", () => {
       await sleep(15000)
     }*/
 
-    logger = createLogger("aztec:aztec-starter:voting")
-    logger.info("Aztec-Starter tests running.")
+    logger = createLogger("aztec:aztec-starter:aztec_gateway_7683")
 
     pxe = await setupSandbox()
     wallets = await getInitialTestAccountsWallets(pxe)
@@ -78,7 +92,6 @@ describe("AztecGateway7683", () => {
 
     const amount = 100n
     const nonce = new Fr(0)
-
     const originData = encodePacked(
       [
         "bytes32",
@@ -136,6 +149,7 @@ describe("AztecGateway7683", () => {
       Buffer.from(orderId.slice(2), "hex"),
       Buffer.alloc(32, 0),
     ])
+
     const l2ToL1Message = sha256ToField([
       gateway.address.toBuffer(),
       new Fr(1).toBuffer(), // aztec version
@@ -150,5 +164,90 @@ describe("AztecGateway7683", () => {
 
     expect(l2ToL1MessageIndex).toBe(0n)
     expect(siblingPath.pathSize).toBe(1)
+  })
+
+  it("should fill a private intent and send the settlement message to the forwarder via portal", async () => {
+    const [admin, filler, recipient] = wallets
+
+    const gatewaySecretKey = Fr.random()
+    const gatewayPublicKeys = (await deriveKeys(gatewaySecretKey)).publicKeys
+    const gatewayDeployment = AztecGateway7683Contract.deployWithPublicKeys(gatewayPublicKeys, admin, PORTAL_ADDRESS)
+    const gatewayInstance = await gatewayDeployment.getInstance()
+    await pxe.registerAccount(gatewaySecretKey, await computePartialAddress(gatewayInstance))
+    const gateway = await gatewayDeployment.send().deployed()
+
+    const token = await TokenContract.deploy(
+      admin,
+      admin.getAddress(),
+      "TestToken0000000000000000000000",
+      "TT00000000000000000000000000000",
+      18,
+    )
+      .send()
+      .deployed()
+
+    await token.withWallet(admin).methods.mint_to_public(filler.getAddress(), 1000000000n).send().wait()
+
+    const amount = 100n
+    const outputToken = token.address.toString()
+    const originData = encodePacked(
+      [
+        "bytes32",
+        "bytes32",
+        "bytes32",
+        "bytes32",
+        "uint256",
+        "uint256",
+        "uint256",
+        "uint32",
+        "uint32",
+        "bytes32",
+        "uint32",
+      ],
+      [
+        "0xde47c9b27eb8d300dbb5f2c353e632c393262cf06340c4fa7f1b40c4cbd36f90",
+        SECRET_HASH,
+        "0xde47c9b27eb8d300dbb5f2c353e632c393262cf06340c4fa7f1b40c4cbd36f90",
+        outputToken,
+        1n,
+        amount,
+        0n, // nonce
+        1,
+        999999,
+        "0xde47c9b27eb8d300dbb5f2c353e632c393262cf06340c4fa7f1b40c4cbd36f90",
+        2 ** 32 - 1,
+      ],
+    )
+
+    const orderId = sha256(originData)
+    const fillerData = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] // keep it 0 for now
+
+    await (
+      await filler.setPublicAuthWit(
+        {
+          caller: gateway.address,
+          action: token.withWallet(filler).methods.transfer_in_public(filler.getAddress(), gateway.address, amount, 0),
+        },
+        true,
+      )
+    )
+      .send()
+      .wait()
+    await gateway
+      .withWallet(filler)
+      .methods.fill_private(Array.from(hexToBytes(orderId)), Array.from(hexToBytes(originData)), fillerData)
+      .send()
+      .wait()
+
+    await gateway
+      .withWallet(recipient)
+      .methods.claim_private(
+        Array.from(hexToBytes(SECRET)),
+        Array.from(hexToBytes(orderId)),
+        Array.from(hexToBytes(originData)),
+        fillerData,
+      )
+      .send()
+      .wait()
   })
 })
