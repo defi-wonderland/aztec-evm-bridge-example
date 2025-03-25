@@ -58,29 +58,6 @@ pub contract AztecGateway7683 {
         storage.config.initialize(Config { portal });
     }
 
-    /**
-    function open(OnchainCrossChainOrder calldata _order) external payable virtual {
-        (ResolvedCrossChainOrder memory resolvedOrder, bytes32 orderId, uint256 nonce) = _resolveOrder(_order);
-
-        openOrders[orderId] = abi.encode(_order.orderDataType, _order.orderData);
-        orderStatus[orderId] = OPENED;
-        _useNonce(msg.sender, nonce);
-
-        uint256 totalValue;
-        for (uint256 i = 0; i < resolvedOrder.minReceived.length; i++) {
-            address token = TypeCasts.bytes32ToAddress(resolvedOrder.minReceived[i].token);
-            if (token == address(0)) {
-                totalValue += resolvedOrder.minReceived[i].amount;
-            } else {
-                IERC20(token).safeTransferFrom(msg.sender, address(this), resolvedOrder.minReceived[i].amount);
-            }
-        }
-
-        if (msg.value != totalValue) revert InvalidNativeAmount();
-
-        emit Open(orderId, resolvedOrder);
-    }**/
-
     #[private]
     fn claim_private(
         secret: [u8; 32],
