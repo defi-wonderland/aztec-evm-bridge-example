@@ -73,8 +73,7 @@ pub contract AztecGateway7683 {
     fn open(order: OnchainCrossChainOrder) {
         assert(order.order_data_type == ORDER_DATA_TYPE_HASH, "Invalid order data type");
 
-        let data: InternalRCOParams =
-            AztecGateway7683::at(context.this_address())._resolve(order).call(&mut context);
+        let data = _resolve(order, context.msg_sender(), context.timestamp());
         let order_data = data.order_data;
         let resolved_order = data.resolved_cross_chain_order;
         let order_id = data.order_id;
@@ -239,14 +238,6 @@ pub contract AztecGateway7683 {
     }
 
     #[public]
-    #[view]
-    fn resolve(order: OnchainCrossChainOrder) -> ResolvedCrossChainOrder {
-        let data: InternalRCOParams =
-            AztecGateway7683::at(context.this_address())._resolve(order).call(&mut context);
-        data.resolved_cross_chain_order
-    }
-
-    #[public]
     #[internal]
     fn _add_open_order(order_id: Field, order_data: [u8; ORDER_DATA_LENGTH]) {
         let mut data: [u8; ORDER_DATA_LENGTH + 32] = [0; ORDER_DATA_LENGTH + 32];
@@ -259,21 +250,20 @@ pub contract AztecGateway7683 {
         storage.open_orders.at(order_id).write(data);
     }
 
-    #[public]
-    #[internal]
-    fn _resolve(order: OnchainCrossChainOrder) -> InternalRCOParams {
+    #[contract_library_method]
+    fn _resolve(
+        order: OnchainCrossChainOrder,
+        sender: AztecAddress,
+        timestamp: u64,
+    ) -> InternalRCOParams {
         let mut order_data = OrderData::decode(order.order_data);
 
         assert(order_data.fill_deadline == order.fill_deadline, "Invalid fill deadline");
-        assert(
-            u8_32_to_aztec_address(order_data.sender) == context.msg_sender(),
-            "Invalid order sender",
-        );
+        assert(u8_32_to_aztec_address(order_data.sender) == sender, "Invalid order sender");
 
         let order_id_bytes = sha256::digest(order.order_data);
         let order_id = Field::from_be_bytes(order_id_bytes);
 
-        // Resolve order
         let min_received_output = Output {
             token: order_data.input_token,
             recipient: [0; 32],
@@ -300,9 +290,9 @@ pub contract AztecGateway7683 {
             [fill_instruction; FILL_INSTRUCTIONS_MAX_INSTRUCTIONS];
 
         let resolved_order = ResolvedCrossChainOrder {
-            user: context.msg_sender(),
+            user: sender,
             origin_chain_id: LOCAL_DESTINATION_DOMAIN,
-            open_dealine: context.timestamp() as u32,
+            open_dealine: timestamp as u32,
             fill_deadline: order.fill_deadline,
             order_id: order_id_bytes,
             min_received,
