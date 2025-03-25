@@ -11,8 +11,9 @@ pub contract AztecGateway7683 {
     global LOCAL_DESTINATION_DOMAIN: u32 = 999999;
 
     global UNKNOWN: u32 = 0;
-    global INITIATED_PRIVATELY: u32 = 1;
+    global OPENED: u32 = 1;
     global FILLED: u32 = 2;
+    global INITIATED_PRIVATELY: u32 = 3;
 
     global SETTLE_ORDER_TYPE: [u8; 32] = [
         100, 26, 150, 232, 234, 193, 205, 65, 73, 216, 31, 243, 122, 123, 194, 24, 136, 159, 246,
@@ -21,7 +22,15 @@ pub contract AztecGateway7683 {
 
     use crate::{
         config::Config,
-        types::order_data::{ORDER_DATA_LENGTH, OrderData},
+        types::{
+            helpers::InternalRCOParams,
+            onchain_cross_chain_order::OnchainCrossChainOrder,
+            order_data::{ORDER_DATA_LENGTH, ORDER_DATA_TYPE_HASH, OrderData},
+            resolved_cross_chain_order::{
+                FILL_INSTRUCTIONS_MAX_INSTRUCTIONS, FillInstruction, MAX_SPENT_MAX_OUTPUTS,
+                MIN_RECEIVED_MAX_OUTPUTS, Output, ResolvedCrossChainOrder,
+            },
+        },
         utils::{u8_32_to_aztec_address, u8_32_to_u128},
     };
     use dep::aztec::{
@@ -31,7 +40,7 @@ pub contract AztecGateway7683 {
             functions::{initializer, internal, private, public, view},
             storage::storage,
         },
-        prelude::{EthAddress, Map, PublicImmutable, PublicMutable},
+        prelude::{AztecAddress, EthAddress, Map, PublicImmutable, PublicMutable},
         protocol_types::{hash::sha256_to_field, traits::Serialize},
         unencrypted_logs::unencrypted_event_emission::encode_event,
     };
@@ -47,15 +56,54 @@ pub contract AztecGateway7683 {
 
     #[storage]
     struct Storage<Context> {
-        order_status: Map<Field, PublicMutable<u32, Context>, Context>,
-        claimable_orders: Map<Field, PublicMutable<Field, Context>, Context>,
         config: PublicImmutable<Config, Context>,
+        claimable_orders: Map<Field, PublicMutable<Field, Context>, Context>,
+        open_orders: Map<Field, PublicMutable<[u8; ORDER_DATA_LENGTH + 32], Context>, Context>, // order_data + order_type
+        order_status: Map<Field, PublicMutable<u32, Context>, Context>,
+        used_nonces: Map<AztecAddress, Map<Field, PublicMutable<bool, Context>, Context>, Context>,
     }
 
     #[public]
     #[initializer]
     fn constructor(portal: EthAddress) {
         storage.config.initialize(Config { portal });
+    }
+
+    #[public]
+    fn open(order: OnchainCrossChainOrder) {
+        assert(order.order_data_type == ORDER_DATA_TYPE_HASH, "Invalid order data type");
+
+        let data: InternalRCOParams =
+            AztecGateway7683::at(context.this_address())._resolve(order).call(&mut context);
+        let order_data = data.order_data;
+        let resolved_order = data.resolved_cross_chain_order;
+        let order_id = data.order_id;
+        let nonce = Field::from_be_bytes(order_data.sender_nonce);
+
+        assert(order_data.origin_domain == LOCAL_DESTINATION_DOMAIN, "Invalid order origin domain");
+        assert(!storage.used_nonces.at(context.msg_sender()).at(nonce).read(), "Invalid nonce");
+
+        AztecGateway7683::at(context.this_address())
+            ._add_open_order(order_id, order.order_data)
+            .call(&mut context);
+
+        storage.order_status.at(order_id).write(OPENED);
+        storage.used_nonces.at(context.msg_sender()).at(nonce).write(true);
+
+        for i in 0..resolved_order.min_received.len() {
+            let min_received = resolved_order.min_received[i];
+
+            Token::at(u8_32_to_aztec_address(min_received.token))
+                .transfer_in_public(
+                    context.msg_sender(),
+                    context.this_address(),
+                    u8_32_to_u128(min_received.amount),
+                    0,
+                )
+                .call(&mut context);
+        }
+
+        // TODO emit event Open(order_id, resolved_order);
     }
 
     #[private]
@@ -113,7 +161,10 @@ pub contract AztecGateway7683 {
         let order_data = OrderData::decode(origin_data_bytes);
         assert(order_id_bytes == sha256::digest(origin_data_bytes), "Invalid order id");
         assert(context.timestamp() as u32 <= order_data.fill_deadline, "Order fill expired");
-        assert(order_data.destination_domain == LOCAL_DESTINATION_DOMAIN, "Invalid order domain");
+        assert(
+            order_data.destination_domain == LOCAL_DESTINATION_DOMAIN,
+            "Invalid order destination domain",
+        );
 
         Token::at(u8_32_to_aztec_address(order_data.output_token))
             .transfer_in_public(
@@ -185,6 +236,81 @@ pub contract AztecGateway7683 {
     #[view]
     fn get_config_public() -> Config {
         storage.config.read()
+    }
+
+    #[public]
+    #[view]
+    fn resolve(order: OnchainCrossChainOrder) -> ResolvedCrossChainOrder {
+        let data: InternalRCOParams =
+            AztecGateway7683::at(context.this_address())._resolve(order).call(&mut context);
+        data.resolved_cross_chain_order
+    }
+
+    #[public]
+    #[internal]
+    fn _add_open_order(order_id: Field, order_data: [u8; ORDER_DATA_LENGTH]) {
+        let mut data: [u8; ORDER_DATA_LENGTH + 32] = [0; ORDER_DATA_LENGTH + 32];
+        for i in 0..32 {
+            data[i] = ORDER_DATA_TYPE_HASH[i];
+        }
+        for i in 0..ORDER_DATA_LENGTH {
+            data[i + 32] = order_data[i];
+        }
+        storage.open_orders.at(order_id).write(data);
+    }
+
+    #[public]
+    #[internal]
+    fn _resolve(order: OnchainCrossChainOrder) -> InternalRCOParams {
+        let mut order_data = OrderData::decode(order.order_data);
+
+        assert(order_data.fill_deadline == order.fill_deadline, "Invalid fill deadline");
+        assert(
+            u8_32_to_aztec_address(order_data.sender) == context.msg_sender(),
+            "Invalid order sender",
+        );
+
+        let order_id_bytes = sha256::digest(order.order_data);
+        let order_id = Field::from_be_bytes(order_id_bytes);
+
+        // Resolve order
+        let min_received_output = Output {
+            token: order_data.input_token,
+            recipient: [0; 32],
+            amount: order_data.amount_in,
+            chain_id: order_data.origin_domain,
+        };
+        let min_received: [Output; MIN_RECEIVED_MAX_OUTPUTS] =
+            [min_received_output; MIN_RECEIVED_MAX_OUTPUTS];
+
+        let max_spent_output = Output {
+            token: order_data.output_token,
+            recipient: order_data.recipient,
+            amount: order_data.amount_out,
+            chain_id: order_data.destination_domain,
+        };
+        let max_spent: [Output; MAX_SPENT_MAX_OUTPUTS] = [max_spent_output; MAX_SPENT_MAX_OUTPUTS];
+
+        let fill_instruction = FillInstruction {
+            destination_chain_id: order_data.destination_domain,
+            destination_settler: order_data.destination_settler,
+            origin_data: order.order_data,
+        };
+        let fill_instructions: [FillInstruction; FILL_INSTRUCTIONS_MAX_INSTRUCTIONS] =
+            [fill_instruction; FILL_INSTRUCTIONS_MAX_INSTRUCTIONS];
+
+        let resolved_order = ResolvedCrossChainOrder {
+            user: context.msg_sender(),
+            origin_chain_id: LOCAL_DESTINATION_DOMAIN,
+            open_dealine: context.timestamp() as u32,
+            fill_deadline: order.fill_deadline,
+            order_id: order_id_bytes,
+            min_received,
+            max_spent,
+            fill_instructions,
+        };
+
+        InternalRCOParams { order_id, resolved_cross_chain_order: resolved_order, order_data }
     }
 
     #[public]

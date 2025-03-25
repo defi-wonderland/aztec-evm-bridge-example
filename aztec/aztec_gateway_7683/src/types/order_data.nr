@@ -1,7 +1,13 @@
 use crate::utils::u8_4_to_u32;
+use dep::aztec::protocol_types::traits::{Deserialize, Serialize};
 
 pub global ORDER_DATA_LENGTH: u32 = 268;
+pub global ORDER_DATA_TYPE_HASH: [u8; 32] = [
+    173, 204, 173, 178, 32, 162, 60, 236, 175, 247, 61, 145, 92, 30, 0, 53, 229, 56, 188, 175, 1,
+    140, 3, 218, 24, 138, 249, 243, 35, 40, 184, 19,
+];
 
+#[derive(Deserialize, Eq, Serialize)]
 pub struct OrderData {
     pub sender: [u8; 32],
     pub recipient: [u8; 32],
