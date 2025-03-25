@@ -7,8 +7,6 @@ import {
   createPXEClient,
   Logger,
   EthAddress,
-  UniqueNote,
-  AztecAddress,
   deriveKeys,
 } from "@aztec/aztec.js"
 import { getInitialTestAccountsWallets } from "@aztec/accounts/testing"
