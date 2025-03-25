@@ -21,7 +21,7 @@ pub contract AztecGateway7683 {
 
     use crate::{
         config::Config,
-        types::{ORDER_DATA_LENGTH, OrderData},
+        types::order_data::{ORDER_DATA_LENGTH, OrderData},
         utils::{u8_32_to_aztec_address, u8_32_to_u128},
     };
     use dep::aztec::{
@@ -58,16 +58,68 @@ pub contract AztecGateway7683 {
         storage.config.initialize(Config { portal });
     }
 
-    #[private]
-    #[view]
-    fn get_config() -> Config {
-        storage.config.read()
-    }
+    /**
+    function open(OnchainCrossChainOrder calldata _order) external payable virtual {
+        (ResolvedCrossChainOrder memory resolvedOrder, bytes32 orderId, uint256 nonce) = _resolveOrder(_order);
 
-    #[public]
-    #[view]
-    fn get_config_public() -> Config {
-        storage.config.read()
+        openOrders[orderId] = abi.encode(_order.orderDataType, _order.orderData);
+        orderStatus[orderId] = OPENED;
+        _useNonce(msg.sender, nonce);
+
+        uint256 totalValue;
+        for (uint256 i = 0; i < resolvedOrder.minReceived.length; i++) {
+            address token = TypeCasts.bytes32ToAddress(resolvedOrder.minReceived[i].token);
+            if (token == address(0)) {
+                totalValue += resolvedOrder.minReceived[i].amount;
+            } else {
+                IERC20(token).safeTransferFrom(msg.sender, address(this), resolvedOrder.minReceived[i].amount);
+            }
+        }
+
+        if (msg.value != totalValue) revert InvalidNativeAmount();
+
+        emit Open(orderId, resolvedOrder);
+    }**/
+
+    #[private]
+    fn claim_private(
+        secret: [u8; 32],
+        order_id_bytes: [u8; 32],
+        origin_data_bytes: [u8; ORDER_DATA_LENGTH],
+        filler_data_bytes: [u8; 32],
+    ) {
+        let order_id = Field::from_be_bytes(order_id_bytes);
+
+        AztecGateway7683::at(context.this_address())
+            ._check_order_status(order_id, INITIATED_PRIVATELY)
+            .enqueue(&mut context);
+
+        // verify that a commitment exists for the given order.
+        AztecGateway7683::at(context.this_address())
+            ._check_order_commitment(order_id, origin_data_bytes, filler_data_bytes)
+            .enqueue(&mut context);
+
+        let order_data = OrderData::decode(origin_data_bytes);
+        // if a commitment exists, the order is valid, allowing us to compare the recipient with hash(secret).
+        assert(sha256::digest(secret) == order_data.recipient, "Invalid secret");
+
+        Token::at(u8_32_to_aztec_address(order_data.output_token))
+            .transfer_to_private(context.msg_sender(), u8_32_to_u128(order_data.amount_out))
+            .call(&mut context);
+
+        AztecGateway7683::at(context.this_address())._update_order_status(order_id, FILLED).enqueue(
+            &mut context,
+        );
+
+        // TODO: store filled order
+        // TODO: emit event
+
+        AztecGateway7683::at(context.this_address())
+            ._trigger_settlement(
+                order_id_bytes,
+                filler_data_bytes, // at the moment filler data contains the ethereum address where the filler wants to receive the funds during the settlement
+            )
+            .enqueue(&mut context);
     }
 
     #[public]
@@ -147,44 +199,15 @@ pub contract AztecGateway7683 {
     }
 
     #[private]
-    fn claim_private(
-        secret: [u8; 32],
-        order_id_bytes: [u8; 32],
-        origin_data_bytes: [u8; ORDER_DATA_LENGTH],
-        filler_data_bytes: [u8; 32],
-    ) {
-        let order_id = Field::from_be_bytes(order_id_bytes);
+    #[view]
+    fn get_config() -> Config {
+        storage.config.read()
+    }
 
-        AztecGateway7683::at(context.this_address())
-            ._check_order_status(order_id, INITIATED_PRIVATELY)
-            .enqueue(&mut context);
-
-        // verify that a commitment exists for the given order.
-        AztecGateway7683::at(context.this_address())
-            ._check_order_commitment(order_id, origin_data_bytes, filler_data_bytes)
-            .enqueue(&mut context);
-
-        let order_data = OrderData::decode(origin_data_bytes);
-        // if a commitment exists, the order is valid, allowing us to compare the recipient with hash(secret).
-        assert(sha256::digest(secret) == order_data.recipient, "Invalid secret");
-
-        Token::at(u8_32_to_aztec_address(order_data.output_token))
-            .transfer_to_private(context.msg_sender(), u8_32_to_u128(order_data.amount_out))
-            .call(&mut context);
-
-        AztecGateway7683::at(context.this_address())._update_order_status(order_id, FILLED).enqueue(
-            &mut context,
-        );
-
-        // TODO: store filled order
-        // TODO: emit event
-
-        AztecGateway7683::at(context.this_address())
-            ._trigger_settlement(
-                order_id_bytes,
-                filler_data_bytes, // at the moment filler data contains the ethereum address where the filler wants to receive the funds during the settlement
-            )
-            .enqueue(&mut context);
+    #[public]
+    #[view]
+    fn get_config_public() -> Config {
+        storage.config.read()
     }
 
     #[public]
