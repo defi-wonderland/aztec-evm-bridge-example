@@ -39,7 +39,7 @@ library OrderEncoder {
     );
     //"bytes data)"
 
-    bytes32 constant ORDER_DATA_TYPE_HASH = keccak256(ORDER_DATA_TYPE);
+    bytes32 constant ORDER_DATA_TYPE_HASH = sha256(ORDER_DATA_TYPE);
 
     function orderDataType() internal pure returns (bytes32) {
         return ORDER_DATA_TYPE_HASH;
