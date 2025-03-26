@@ -25,7 +25,7 @@ pub contract AztecGateway7683 {
         types::{
             helpers::InternalRCOParams,
             onchain_cross_chain_order::OnchainCrossChainOrder,
-            order_data::{ORDER_DATA_LENGTH, ORDER_DATA_TYPE_HASH, OrderData},
+            order_data::{ORDER_DATA_LENGTH, ORDER_DATA_TYPE, OrderData},
             resolved_cross_chain_order::{
                 FILL_INSTRUCTIONS_MAX_INSTRUCTIONS, FillInstruction, MAX_SPENT_MAX_OUTPUTS,
                 MIN_RECEIVED_MAX_OUTPUTS, Output, ResolvedCrossChainOrder,
@@ -58,7 +58,7 @@ pub contract AztecGateway7683 {
     struct Storage<Context> {
         config: PublicImmutable<Config, Context>,
         claimable_orders: Map<Field, PublicMutable<Field, Context>, Context>,
-        open_orders: Map<Field, PublicMutable<[u8; ORDER_DATA_LENGTH + 32], Context>, Context>, // order_data + order_type
+        open_orders: Map<Field, PublicMutable<[u8; 32], Context>, Context>, // order_data + order_type
         order_status: Map<Field, PublicMutable<u32, Context>, Context>,
         used_nonces: Map<AztecAddress, Map<Field, PublicMutable<bool, Context>, Context>, Context>,
     }
@@ -71,7 +71,7 @@ pub contract AztecGateway7683 {
 
     #[public]
     fn open(order: OnchainCrossChainOrder) {
-        assert(order.order_data_type == ORDER_DATA_TYPE_HASH, "Invalid order data type");
+        assert(order.order_data_type == ORDER_DATA_TYPE, "Invalid order data type");
 
         let data = _resolve(order, context.msg_sender(), context.timestamp());
         let order_data = data.order_data;
@@ -82,10 +82,10 @@ pub contract AztecGateway7683 {
         assert(order_data.origin_domain == LOCAL_DESTINATION_DOMAIN, "Invalid order origin domain");
         assert(!storage.used_nonces.at(context.msg_sender()).at(nonce).read(), "Invalid nonce");
 
-        AztecGateway7683::at(context.this_address())
-            ._add_open_order(order_id, order.order_data)
-            .call(&mut context);
-
+        // We cannot store the entire order_data + ORDER_DATA_TYPE as it raises the following error:
+        // Reached the limit (63) on number of 'public data (contract storage) write' per tx 'storage_write_opcode(storage_slot, value).
+        // For this reason we store a commitment of it.
+        storage.open_orders.at(order_id).write(_get_open_order_commitment(order.order_data));
         storage.order_status.at(order_id).write(OPENED);
         storage.used_nonces.at(context.msg_sender()).at(nonce).write(true);
 
@@ -237,17 +237,16 @@ pub contract AztecGateway7683 {
         storage.config.read()
     }
 
-    #[public]
-    #[internal]
-    fn _add_open_order(order_id: Field, order_data: [u8; ORDER_DATA_LENGTH]) {
+    #[contract_library_method]
+    fn _get_open_order_commitment(order_data: [u8; ORDER_DATA_LENGTH]) -> [u8; 32] {
         let mut data: [u8; ORDER_DATA_LENGTH + 32] = [0; ORDER_DATA_LENGTH + 32];
         for i in 0..32 {
-            data[i] = ORDER_DATA_TYPE_HASH[i];
+            data[i] = ORDER_DATA_TYPE[i];
         }
         for i in 0..ORDER_DATA_LENGTH {
             data[i + 32] = order_data[i];
         }
-        storage.open_orders.at(order_id).write(data);
+        sha256::digest(data)
     }
 
     #[contract_library_method]

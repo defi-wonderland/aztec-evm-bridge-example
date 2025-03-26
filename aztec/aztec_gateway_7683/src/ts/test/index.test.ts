@@ -23,8 +23,10 @@ import { TokenContract } from "../../artifacts/Token.js"
 const MNEMONIC = "test test test test test test test test test test test junk"
 const PORTAL_ADDRESS = EthAddress.ZERO
 const SETTLE_ORDER_TYPE = "641a96e8eac1cd4149d81ff37a7bc218889ff69c7ce4260d7a09ca9aea5cbabd"
+const ORDER_DATA_TYPE = "0xadccadb220a23cecaff73d915c1e0035e538bcaf018c03da188af9f32328b813"
 const SECRET = "0x2bb80d537b1da3e38bd30361aa855686bde0eacd7162fef6a25fe97bf527a25b" // sha256("secret")
 const SECRET_HASH = sha256(SECRET)
+const AZTEC_7683_DOMAIN = 999999
 
 const setupSandbox = async () => {
   const { PXE_URL = "http://localhost:8080" } = process.env
@@ -73,7 +75,79 @@ describe("AztecGateway7683", () => {
     }
   })
 
-  it("should fill a public intent and send the settlement message to the forwarder via portal", async () => {
+  it("should open a public order", async () => {
+    const [admin, filler, user] = wallets
+
+    const gateway = await AztecGateway7683Contract.deploy(admin, PORTAL_ADDRESS).send().deployed()
+    const token = await TokenContract.deploy(
+      admin,
+      admin.getAddress(),
+      "TestToken0000000000000000000000",
+      "TT00000000000000000000000000000",
+      18,
+    )
+      .send()
+      .deployed()
+    await token.withWallet(admin).methods.mint_to_public(user.getAddress(), 1000000000n).send().wait()
+
+    const amountIn = 100n
+    const nonce = new Fr(0)
+
+    await (
+      await user.setPublicAuthWit(
+        {
+          caller: gateway.address,
+          action: token
+            .withWallet(filler)
+            .methods.transfer_in_public(user.getAddress(), gateway.address, amountIn, nonce),
+        },
+        true,
+      )
+    )
+      .send()
+      .wait()
+
+    const orderData = encodePacked(
+      [
+        "bytes32",
+        "bytes32",
+        "bytes32",
+        "bytes32",
+        "uint256",
+        "uint256",
+        "uint256",
+        "uint32",
+        "uint32",
+        "bytes32",
+        "uint32",
+      ],
+      [
+        user.getAddress().toString(),
+        user.getAddress().toString(),
+        token.address.toString(),
+        "0xde47c9b27eb8d300dbb5f2c353e632c393262cf06340c4fa7f1b40c4cbd36f90",
+        amountIn,
+        0n,
+        0n, // nonce
+        AZTEC_7683_DOMAIN,
+        1,
+        "0xde47c9b27eb8d300dbb5f2c353e632c393262cf06340c4fa7f1b40c4cbd36f90",
+        2 ** 32 - 1,
+      ],
+    )
+
+    await gateway
+      .withWallet(user)
+      .methods.open({
+        fill_deadline: 2 ** 32 - 1,
+        order_data: Array.from(hexToBytes(orderData)),
+        order_data_type: Array.from(hexToBytes(ORDER_DATA_TYPE)),
+      })
+      .send()
+      .wait()
+  })
+
+  it("should fill a public order and send the settlement message to the forwarder via portal", async () => {
     const [admin, filler, recipient] = wallets
 
     const gateway = await AztecGateway7683Contract.deploy(admin, PORTAL_ADDRESS).send().deployed()
@@ -113,7 +187,7 @@ describe("AztecGateway7683", () => {
         amount,
         0n, // nonce
         1,
-        999999,
+        AZTEC_7683_DOMAIN,
         "0xde47c9b27eb8d300dbb5f2c353e632c393262cf06340c4fa7f1b40c4cbd36f90",
         2 ** 32 - 1,
       ],
@@ -164,7 +238,7 @@ describe("AztecGateway7683", () => {
     expect(siblingPath.pathSize).toBe(1)
   })
 
-  it("should fill a private intent and send the settlement message to the forwarder via portal", async () => {
+  it("should fill a private order and send the settlement message to the forwarder via portal", async () => {
     const [admin, filler, recipient] = wallets
 
     const gatewaySecretKey = Fr.random()
@@ -211,7 +285,7 @@ describe("AztecGateway7683", () => {
         amount,
         0n, // nonce
         1,
-        999999,
+        AZTEC_7683_DOMAIN,
         "0xde47c9b27eb8d300dbb5f2c353e632c393262cf06340c4fa7f1b40c4cbd36f90",
         2 ** 32 - 1,
       ],
