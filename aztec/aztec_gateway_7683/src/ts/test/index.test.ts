@@ -148,7 +148,7 @@ describe("AztecGateway7683", () => {
   })
 
   it("should open a private order", async () => {
-    const [admin, filler, user] = wallets
+    const [admin, user] = wallets
 
     const gatewaySecretKey = Fr.random()
     const gatewayPublicKeys = (await deriveKeys(gatewaySecretKey)).publicKeys
