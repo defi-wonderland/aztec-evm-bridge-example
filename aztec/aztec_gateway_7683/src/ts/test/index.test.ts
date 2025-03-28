@@ -147,6 +147,80 @@ describe("AztecGateway7683", () => {
       .wait()
   })
 
+  it("should open a private order", async () => {
+    const [admin, filler, user] = wallets
+
+    const gatewaySecretKey = Fr.random()
+    const gatewayPublicKeys = (await deriveKeys(gatewaySecretKey)).publicKeys
+    const gatewayDeployment = AztecGateway7683Contract.deployWithPublicKeys(gatewayPublicKeys, admin, PORTAL_ADDRESS)
+    const gatewayInstance = await gatewayDeployment.getInstance()
+    await pxe.registerAccount(gatewaySecretKey, await computePartialAddress(gatewayInstance))
+    const gateway = await gatewayDeployment.send().deployed()
+
+    const token = await TokenContract.deploy(
+      admin,
+      admin.getAddress(),
+      "TestToken0000000000000000000000",
+      "TT00000000000000000000000000000",
+      18,
+    )
+      .send()
+      .deployed()
+    await token
+      .withWallet(admin)
+      .methods.mint_to_private(admin.getAddress(), user.getAddress(), 1000000000n)
+      .send()
+      .wait()
+
+    const amountIn = 100n
+    const nonce = new Fr(0)
+
+    const witness = await user.createAuthWit({
+      caller: gateway.address,
+      action: token.withWallet(user).methods.transfer_in_private(user.getAddress(), gateway.address, amountIn, nonce),
+    })
+    await user.addAuthWitness(witness)
+
+    const orderData = encodePacked(
+      [
+        "bytes32",
+        "bytes32",
+        "bytes32",
+        "bytes32",
+        "uint256",
+        "uint256",
+        "uint256",
+        "uint32",
+        "uint32",
+        "bytes32",
+        "uint32",
+      ],
+      [
+        user.getAddress().toString(),
+        user.getAddress().toString(),
+        token.address.toString(),
+        "0xde47c9b27eb8d300dbb5f2c353e632c393262cf06340c4fa7f1b40c4cbd36f90",
+        amountIn,
+        0n,
+        0n, // nonce
+        AZTEC_7683_DOMAIN,
+        1,
+        "0xde47c9b27eb8d300dbb5f2c353e632c393262cf06340c4fa7f1b40c4cbd36f90",
+        2 ** 32 - 1,
+      ],
+    )
+
+    await gateway
+      .withWallet(user)
+      .methods.open_private({
+        fill_deadline: 2 ** 32 - 1,
+        order_data: Array.from(hexToBytes(orderData)),
+        order_data_type: Array.from(hexToBytes(ORDER_DATA_TYPE)),
+      })
+      .send()
+      .wait()
+  })
+
   it("should fill a public order and send the settlement message to the forwarder via portal", async () => {
     const [admin, filler, recipient] = wallets
 

@@ -106,6 +106,53 @@ pub contract AztecGateway7683 {
     }
 
     #[private]
+    fn open_private(order: OnchainCrossChainOrder) {
+        assert(order.order_data_type == ORDER_DATA_TYPE, "Invalid order data type");
+
+        let data = _resolve(order, context.msg_sender(), 0 as u64);
+        let order_data = data.order_data;
+        let resolved_order = data.resolved_cross_chain_order;
+        let order_id = data.order_id;
+        let nonce = Field::from_be_bytes(order_data.sender_nonce);
+
+        assert(order_data.origin_domain == LOCAL_DESTINATION_DOMAIN, "Invalid order origin domain");
+        AztecGateway7683::at(context.this_address())
+            ._assert_nonce_and_set_order_details(order_id, order.order_data, nonce)
+            .enqueue(&mut context);
+
+        for i in 0..resolved_order.min_received.len() {
+            let min_received = resolved_order.min_received[i];
+
+            Token::at(u8_32_to_aztec_address(min_received.token))
+                .transfer_in_private(
+                    context.msg_sender(),
+                    context.this_address(),
+                    u8_32_to_u128(min_received.amount),
+                    0,
+                )
+                .call(&mut context);
+        }
+
+        // TODO emit event Open(order_id, resolved_order);
+    }
+
+    #[internal]
+    #[public]
+    fn _assert_nonce_and_set_order_details(
+        order_id: Field,
+        order_data: [u8; ORDER_DATA_LENGTH],
+        nonce: Field,
+    ) {
+        assert(!storage.used_nonces.at(context.msg_sender()).at(nonce).read(), "Invalid nonce");
+        // We cannot store the entire order_data + ORDER_DATA_TYPE as it raises the following error:
+        // Reached the limit (63) on number of 'public data (contract storage) write' per tx 'storage_write_opcode(storage_slot, value).
+        // For this reason we store a commitment of it.
+        storage.open_orders.at(order_id).write(_get_open_order_commitment(order_data));
+        storage.order_status.at(order_id).write(OPENED);
+        storage.used_nonces.at(context.msg_sender()).at(nonce).write(true);
+    }
+
+    #[private]
     fn claim_private(
         secret: [u8; 32],
         order_id_bytes: [u8; 32],
@@ -213,15 +260,10 @@ pub contract AztecGateway7683 {
             )
             .call(&mut context);
 
-        let mut pre_image: [u8; ORDER_DATA_LENGTH + 32] = [0; ORDER_DATA_LENGTH + 32];
-        for i in 0..ORDER_DATA_LENGTH {
-            pre_image[i] = origin_data_bytes[i];
-        }
-        for i in 0..32 {
-            pre_image[i + ORDER_DATA_LENGTH] = filler_data_bytes[i];
-        }
-
-        storage.claimable_orders.at(order_id).write(sha256_to_field(pre_image));
+        storage.claimable_orders.at(order_id).write(sha256_to_field(_get_order_pre_image(
+            origin_data_bytes,
+            filler_data_bytes,
+        )));
         storage.order_status.at(order_id).write(INITIATED_PRIVATELY);
     }
 
@@ -247,6 +289,48 @@ pub contract AztecGateway7683 {
             data[i + 32] = order_data[i];
         }
         sha256::digest(data)
+    }
+
+    #[public]
+    #[internal]
+    fn _check_order_status(order_id: Field, status: u32) {
+        assert(storage.order_status.at(order_id).read() == status, "Invalid order status");
+    }
+
+    #[public]
+    #[internal]
+    fn _update_order_status(order_id: Field, status: u32) {
+        storage.order_status.at(order_id).write(status);
+    }
+
+    #[public]
+    #[internal]
+    fn _check_order_commitment(
+        order_id: Field,
+        origin_data_bytes: [u8; ORDER_DATA_LENGTH],
+        filler_data_bytes: [u8; 32],
+    ) {
+        let order_commitment = storage.claimable_orders.at(order_id).read();
+        assert(
+            order_commitment
+                == sha256_to_field(_get_order_pre_image(origin_data_bytes, filler_data_bytes)),
+            "Invalid order",
+        );
+    }
+
+    #[public]
+    #[internal]
+    fn _trigger_settlement(order_id_bytes: [u8; 32], filler_data: [u8; 32]) {
+        let mut settlement_message_bytes: [u8; 96] = [0; 96];
+
+        for i in 0..32 {
+            settlement_message_bytes[i] = SETTLE_ORDER_TYPE[i]; // order_type
+            settlement_message_bytes[i + 32] = order_id_bytes[i]; // order_id_bytes
+            settlement_message_bytes[i + 54] = filler_data[i]; // recipient
+        }
+
+        let config = storage.config.read();
+        context.message_portal(config.portal, sha256_to_field(settlement_message_bytes));
     }
 
     #[contract_library_method]
@@ -302,25 +386,11 @@ pub contract AztecGateway7683 {
         InternalRCOParams { order_id, resolved_cross_chain_order: resolved_order, order_data }
     }
 
-    #[public]
-    #[internal]
-    fn _check_order_status(order_id: Field, status: u32) {
-        assert(storage.order_status.at(order_id).read() == status, "Invalid order status");
-    }
-
-    #[public]
-    #[internal]
-    fn _update_order_status(order_id: Field, status: u32) {
-        storage.order_status.at(order_id).write(status);
-    }
-
-    #[public]
-    #[internal]
-    fn _check_order_commitment(
-        order_id: Field,
+    #[contract_library_method]
+    fn _get_order_pre_image(
         origin_data_bytes: [u8; ORDER_DATA_LENGTH],
         filler_data_bytes: [u8; 32],
-    ) {
+    ) -> [u8; ORDER_DATA_LENGTH + 32] {
         let mut pre_image: [u8; ORDER_DATA_LENGTH + 32] = [0; ORDER_DATA_LENGTH + 32];
         for i in 0..ORDER_DATA_LENGTH {
             pre_image[i] = origin_data_bytes[i];
@@ -328,22 +398,6 @@ pub contract AztecGateway7683 {
         for i in 0..32 {
             pre_image[i + ORDER_DATA_LENGTH] = filler_data_bytes[i];
         }
-        let order_commitment = storage.claimable_orders.at(order_id).read();
-        assert(order_commitment == sha256_to_field(pre_image), "Invalid order");
-    }
-
-    #[public]
-    #[internal]
-    fn _trigger_settlement(order_id_bytes: [u8; 32], filler_data: [u8; 32]) {
-        let mut settlement_message_bytes: [u8; 96] = [0; 96];
-
-        for i in 0..32 {
-            settlement_message_bytes[i] = SETTLE_ORDER_TYPE[i]; // order_type
-            settlement_message_bytes[i + 32] = order_id_bytes[i]; // order_id_bytes
-            settlement_message_bytes[i + 54] = filler_data[i]; // recipient
-        }
-
-        let config = storage.config.read();
-        context.message_portal(config.portal, sha256_to_field(settlement_message_bytes));
+        pre_image
     }
 }
