@@ -196,7 +196,7 @@ describe("AztecGateway7683", () => {
         "uint32",
       ],
       [
-        user.getAddress().toString(),
+        "0x0000000000000000000000000000000000000000000000000000000000000000",
         user.getAddress().toString(),
         token.address.toString(),
         "0xde47c9b27eb8d300dbb5f2c353e632c393262cf06340c4fa7f1b40c4cbd36f90",
