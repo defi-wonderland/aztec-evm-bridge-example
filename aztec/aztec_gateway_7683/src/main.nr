@@ -137,22 +137,6 @@ pub contract AztecGateway7683 {
         // TODO emit event Open(order_id, resolved_order);
     }
 
-    #[internal]
-    #[public]
-    fn _assert_nonce_and_set_order_details(
-        order_id: Field,
-        order_data: [u8; ORDER_DATA_LENGTH],
-        nonce: Field,
-    ) {
-        assert(!storage.used_nonces.at(context.msg_sender()).at(nonce).read(), "Invalid nonce");
-        // We cannot store the entire order_data + ORDER_DATA_TYPE as it raises the following error:
-        // Reached the limit (63) on number of 'public data (contract storage) write' per tx 'storage_write_opcode(storage_slot, value).
-        // For this reason we store a commitment of it.
-        storage.open_orders.at(order_id).write(_get_open_order_commitment(order_data));
-        storage.order_status.at(order_id).write(OPENED);
-        storage.used_nonces.at(context.msg_sender()).at(nonce).write(true);
-    }
-
     #[private]
     fn claim_private(
         secret: [u8; 32],
@@ -268,16 +252,32 @@ pub contract AztecGateway7683 {
         storage.order_status.at(order_id).write(INITIATED_PRIVATELY);
     }
 
-    #[private]
+    #[public]
     #[view]
     fn get_config() -> Config {
         storage.config.read()
     }
 
-    #[public]
+    #[private]
     #[view]
-    fn get_config_public() -> Config {
+    fn get_config_private() -> Config {
         storage.config.read()
+    }
+
+    #[internal]
+    #[public]
+    fn _assert_nonce_and_set_order_details(
+        order_id: Field,
+        order_data: [u8; ORDER_DATA_LENGTH],
+        nonce: Field,
+    ) {
+        assert(!storage.used_nonces.at(context.msg_sender()).at(nonce).read(), "Invalid nonce");
+        // We cannot store the entire order_data + ORDER_DATA_TYPE as it raises the following error:
+        // Reached the limit (63) on number of 'public data (contract storage) write' per tx 'storage_write_opcode(storage_slot, value).
+        // For this reason we store a commitment of it.
+        storage.open_orders.at(order_id).write(_get_open_order_commitment(order_data));
+        storage.order_status.at(order_id).write(OPENED);
+        storage.used_nonces.at(context.msg_sender()).at(nonce).write(true);
     }
 
     #[contract_library_method]
