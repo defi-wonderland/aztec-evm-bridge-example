@@ -1,6 +1,6 @@
 import winston from "winston"
-import { PublicClient } from "viem"
-import { Log } from "viem"
+
+import type { PublicClient, Log } from "viem"
 
 interface WatcherConfigs {
   service: string

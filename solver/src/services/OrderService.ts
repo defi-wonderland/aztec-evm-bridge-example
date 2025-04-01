@@ -1,12 +1,17 @@
-import BaseService, { BaseServiceOpts } from "./BaseService"
-import { Wallet } from "@aztec/aztec.js"
-import { hexToBytes, Log, padHex, PublicClient, WalletClient } from "viem"
+import BaseService from "./BaseService"
+import { hexToBytes, padHex } from "viem"
 import { AztecAddress, Contract } from "@aztec/aztec.js"
-import { TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
+import { TokenContract, TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
 
 import { registerContract } from "../utils/aztec.js"
+import {
+  AztecGateway7683Contract,
+  AztecGateway7683ContractArtifact,
+} from "../artifacts/AztecGateway7683/AztecGateway7683.js"
 
-import { AztecGateway7683ContractArtifact } from "../artifacts/AztecGateway7683/AztecGateway7683.js"
+import type { Log, PublicClient, WalletClient } from "viem"
+import type { Wallet } from "@aztec/aztec.js"
+import type { BaseServiceOpts } from "./BaseService"
 
 const AZTEC_CHAIN_ID = 999999n
 
@@ -36,7 +41,7 @@ class OrderService extends BaseService {
           orderId,
           resolvedOrder: { fillInstructions, maxSpent, minReceived },
         },
-      } = log
+      } = log as any
 
       const originData = fillInstructions[0].originData
       const minReceivedAmount = minReceived[0].amount
@@ -70,12 +75,8 @@ class OrderService extends BaseService {
       }
 
       const [token, aztecGateway] = await Promise.all([
-        Contract.at(AztecAddress.fromString(maxSpentToken), TokenContractArtifact, this.aztecWallet),
-        Contract.at(
-          AztecAddress.fromString(this.aztecGatewayContractAddress),
-          AztecGateway7683ContractArtifact,
-          this.aztecWallet,
-        ),
+        TokenContract.at(AztecAddress.fromString(maxSpentToken), this.aztecWallet),
+        AztecGateway7683Contract.at(AztecAddress.fromString(this.aztecGatewayContractAddress), this.aztecWallet),
       ])
 
       this.logger.info("setting public auth with to fill the order ...")

@@ -1,31 +1,21 @@
 import "dotenv/config"
-import {
-  Address,
-  bytesToHex,
-  createWalletClient,
-  encodeAbiParameters,
-  http,
-  keccak256,
-  Log,
-  publicActions,
-  PublicClient,
-  WalletClient,
-} from "viem"
+import { bytesToHex, createWalletClient, encodeAbiParameters, http, keccak256, publicActions } from "viem"
 import * as chains from "viem/chains"
 const { ssz } = await import("@lodestar/types")
 const { BeaconBlock, SignedBeaconBlock } = ssz.electra
 const { createProof, ProofType } = await import("@chainsafe/persistent-merkle-tree")
 import { privateKeyToAccount } from "viem/accounts"
 import { AztecAddress } from "@aztec/aztec.js"
+import { MongoClient } from "mongodb"
 
 import EvmWatcher from "./watchers/EvmWatcher.js"
 import logger from "./utils/logger.js"
 import { getAztecWallet, registerContract } from "./utils/aztec.js"
-
 import l2Gateway7683Abi from "./abis/evm/l2Gateway7683.js"
 import { AztecGateway7683ContractArtifact } from "./artifacts/AztecGateway7683/AztecGateway7683.js"
-import { MongoClient } from "mongodb"
 import OrderService from "./services/OrderService.js"
+
+import type { PublicClient, WalletClient, Log, Address } from "viem"
 
 // const FORWARDER_ADDRESS = "0x5182eCEF5Ffb88d3DcE2b154c9F16c5FC0fE5B4a"
 const FORWARDER_SETTLE_ORDER_SLOTS = 0n
