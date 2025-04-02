@@ -1,19 +1,15 @@
 import BaseService from "./BaseService"
 import { hexToBytes, padHex } from "viem"
-import { AztecAddress, Contract } from "@aztec/aztec.js"
+import { AztecAddress } from "@aztec/aztec.js"
 import { TokenContract, TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
 
 import { registerContract } from "../utils/aztec.js"
-import {
-  AztecGateway7683Contract,
-  AztecGateway7683ContractArtifact,
-} from "../artifacts/AztecGateway7683/AztecGateway7683.js"
+import { AztecGateway7683Contract } from "../artifacts/AztecGateway7683/AztecGateway7683.js"
+import { AZTEC_7683_CHAIN_ID, ORDER_FILLED, ORDER_INITIATED_PRIVATELY, PRIVATE_ORDER_DATA } from "../constants.js"
 
 import type { Log, PublicClient, WalletClient } from "viem"
 import type { Wallet } from "@aztec/aztec.js"
 import type { BaseServiceOpts } from "./BaseService"
-
-const AZTEC_CHAIN_ID = 999999n
 
 export type OrderServiceOpts = BaseServiceOpts & {
   aztecWallet: Wallet
@@ -32,6 +28,42 @@ class OrderService extends BaseService {
     this.aztecWallet = opts.aztecWallet
     this.evmWallet = opts.evmWallet
     this.aztecGatewayContractAddress = opts.aztecGatewayContractAddress
+
+    this.monitorInitiadedPrivatelyOrders()
+    setInterval(() => {
+      this.monitorInitiadedPrivatelyOrders()
+    }, 5000)
+  }
+
+  async monitorInitiadedPrivatelyOrders(): Promise<void> {
+    try {
+      this.logger.info("looking for settlable orders ...")
+
+      const orders = await this.db
+        .collection("orders")
+        .find({
+          status: "initiatedPrivately",
+        })
+        .toArray()
+      if (orders.length === 0) {
+        this.logger.info("no settlable orders found ...")
+        return
+      }
+
+      const gateway = await AztecGateway7683Contract.at(
+        AztecAddress.fromString(this.aztecGatewayContractAddress),
+        this.aztecWallet,
+      )
+
+      /*const orderIds = orders.map(({ orderId }) => orderId)
+      const newOrdersStatus = await Promise.all(
+        orderIds.map((orderId) => gateway.methods.get_order_status(Array.from(hexToBytes(orderId))).simulate()),
+      )*/
+
+      //console.log("newOrdersStatus", newOrdersStatus)
+    } catch (err) {
+      this.logger.error(err)
+    }
   }
 
   async fillEvmOrderFromLog(log: Log): Promise<void> {
@@ -54,7 +86,7 @@ class OrderService extends BaseService {
       const maxSpentChainId = maxSpent[0].chainId
 
       // TODO: check if minReceivedToken is supported
-      if (maxSpentChainId !== AZTEC_CHAIN_ID) throw new Error("Invalid chain id")
+      if (maxSpentChainId !== AZTEC_7683_CHAIN_ID) throw new Error("Invalid chain id")
 
       // TODO: calculate the best price for this swap
       this.logger.info(
@@ -63,13 +95,10 @@ class OrderService extends BaseService {
 
       try {
         this.logger.info("registering token contract into the PXE ...")
-        await registerContract(
-          AztecAddress.fromString(maxSpentToken), // 0x178b0fd9a11b89818920975b7000965cff36c7c4ea3425e90b9093370b77ac75
-          {
-            wallet: this.aztecWallet,
-            artifact: TokenContractArtifact,
-          },
-        )
+        await registerContract(AztecAddress.fromString(maxSpentToken), {
+          wallet: this.aztecWallet,
+          artifact: TokenContractArtifact,
+        })
       } catch (err) {
         this.logger.error(err)
       }
@@ -97,16 +126,33 @@ class OrderService extends BaseService {
         .send()
         .wait()
 
-      this.logger.info("filling the order ...")
-      const receipt = await aztecGateway
-        .withWallet(this.aztecWallet)
-        .methods.fill_private(
-          Array.from(hexToBytes(orderId)),
-          Array.from(hexToBytes(originData)),
-          Array.from(hexToBytes(padHex(this.evmWallet.account.address))),
-        )
-        .send()
-        .wait()
+      const orderStatus = "0x" + originData.slice(-64) === PRIVATE_ORDER_DATA ? ORDER_INITIATED_PRIVATELY : ORDER_FILLED
+
+      let receipt
+      if (orderStatus === ORDER_INITIATED_PRIVATELY) {
+        this.logger.info("filling the private order ...")
+        receipt = await aztecGateway
+          .withWallet(this.aztecWallet)
+          .methods.fill_private(
+            Array.from(hexToBytes(orderId)),
+            Array.from(hexToBytes(originData)),
+            Array.from(hexToBytes(padHex(this.evmWallet.account.address))),
+          )
+          .send()
+          .wait()
+      } else {
+        this.logger.info("filling the public order ...")
+        receipt = await aztecGateway
+          .withWallet(this.aztecWallet)
+          .methods.fill(
+            Array.from(hexToBytes(orderId)),
+            Array.from(hexToBytes(originData)),
+            Array.from(hexToBytes(padHex(this.evmWallet.account.address))),
+          )
+          .send()
+          .wait()
+      }
+
       this.logger.info(`order filled succesfully: ${receipt.txHash.toString()}. storing it ...`)
 
       await this.db.collection("orders").findOneAndUpdate(
@@ -118,6 +164,7 @@ class OrderService extends BaseService {
           $setOnInsert: {
             ...(log as any).args,
             fillTxHash: receipt.txHash.toString(),
+            status: orderStatus,
           },
         },
         { upsert: true, returnDocument: "after" },

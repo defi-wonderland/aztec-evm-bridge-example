@@ -121,7 +121,7 @@ export class AztecGateway7683Contract extends ContractBase {
   }
 
   public static get storage(): ContractStorageLayout<
-    "config" | "claimable_orders" | "open_orders" | "order_status" | "used_nonces"
+    "config" | "claimable_orders" | "open_orders" | "order_status" | "used_nonces" | "order_filler_data"
   > {
     return {
       config: {
@@ -139,7 +139,12 @@ export class AztecGateway7683Contract extends ContractBase {
       used_nonces: {
         slot: new Fr(6n),
       },
-    } as ContractStorageLayout<"config" | "claimable_orders" | "open_orders" | "order_status" | "used_nonces">
+      order_filler_data: {
+        slot: new Fr(7n),
+      },
+    } as ContractStorageLayout<
+      "config" | "claimable_orders" | "open_orders" | "order_status" | "used_nonces" | "order_filler_data"
+    >
   }
 
   public static get notes(): ContractNotes<"UintNote"> {
@@ -183,8 +188,16 @@ export class AztecGateway7683Contract extends ContractBase {
     /** get_config() */
     get_config: (() => ContractFunctionInteraction) & Pick<ContractMethod, "selector">
 
-    /** get_config_public() */
-    get_config_public: (() => ContractFunctionInteraction) & Pick<ContractMethod, "selector">
+    /** get_config_private() */
+    get_config_private: (() => ContractFunctionInteraction) & Pick<ContractMethod, "selector">
+
+    /** get_order_filler_data(order_id_bytes: array) */
+    get_order_filler_data: ((order_id_bytes: (bigint | number)[]) => ContractFunctionInteraction) &
+      Pick<ContractMethod, "selector">
+
+    /** get_order_status(order_id_bytes: array) */
+    get_order_status: ((order_id_bytes: (bigint | number)[]) => ContractFunctionInteraction) &
+      Pick<ContractMethod, "selector">
 
     /** open(order: struct) */
     open: ((order: {
@@ -241,7 +254,7 @@ export class AztecGateway7683Contract extends ContractBase {
               name: "origin_data",
               type: {
                 kind: "array",
-                length: 268,
+                length: 300,
                 type: {
                   kind: "integer",
                   sign: "unsigned",
@@ -264,7 +277,7 @@ export class AztecGateway7683Contract extends ContractBase {
           ],
           path: "AztecGateway7683::Filled",
         },
-        eventSelector: EventSelector.fromString("0xe7c908bc"),
+        eventSelector: EventSelector.fromString("0x8791995f"),
         fieldNames: ["order_id", "origin_data", "filler_data"],
       },
     }
