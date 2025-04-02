@@ -23,10 +23,12 @@ import { TokenContract } from "../../artifacts/Token.js"
 const MNEMONIC = "test test test test test test test test test test test junk"
 const PORTAL_ADDRESS = EthAddress.ZERO
 const SETTLE_ORDER_TYPE = "641a96e8eac1cd4149d81ff37a7bc218889ff69c7ce4260d7a09ca9aea5cbabd"
-const ORDER_DATA_TYPE = "0xadccadb220a23cecaff73d915c1e0035e538bcaf018c03da188af9f32328b813"
+const ORDER_DATA_TYPE = "0xce57c37dfc5b92296648c64d29544cc620ec6dee71a883e75186bca75bca436c"
 const SECRET = "0x2bb80d537b1da3e38bd30361aa855686bde0eacd7162fef6a25fe97bf527a25b" // sha256("secret")
 const SECRET_HASH = sha256(SECRET)
 const AZTEC_7683_DOMAIN = 999999
+const PUBLIC_ORDER_DATA = "0xefa1f375d76194fa51a3556a97e641e61685f914d446979da50a551a4333ffd7" // sha256("public")
+const PRIVATE_ORDER_DATA = "0x715dc8493c36579a5b116995100f635e3572fdf8703e708ef1a08d943b36774e" // sha256("private")
 
 const setupSandbox = async () => {
   const { PXE_URL = "http://localhost:8080" } = process.env
@@ -120,6 +122,7 @@ describe("AztecGateway7683", () => {
         "uint32",
         "bytes32",
         "uint32",
+        "bytes32"
       ],
       [
         user.getAddress().toString(),
@@ -133,6 +136,7 @@ describe("AztecGateway7683", () => {
         1,
         "0xde47c9b27eb8d300dbb5f2c353e632c393262cf06340c4fa7f1b40c4cbd36f90",
         2 ** 32 - 1,
+        PUBLIC_ORDER_DATA
       ],
     )
 
@@ -194,6 +198,7 @@ describe("AztecGateway7683", () => {
         "uint32",
         "bytes32",
         "uint32",
+        "bytes32"
       ],
       [
         "0x0000000000000000000000000000000000000000000000000000000000000000",
@@ -207,6 +212,7 @@ describe("AztecGateway7683", () => {
         1,
         "0xde47c9b27eb8d300dbb5f2c353e632c393262cf06340c4fa7f1b40c4cbd36f90",
         2 ** 32 - 1,
+        PRIVATE_ORDER_DATA
       ],
     )
 
@@ -251,6 +257,7 @@ describe("AztecGateway7683", () => {
         "uint32",
         "bytes32",
         "uint32",
+        "bytes32"
       ],
       [
         "0xde47c9b27eb8d300dbb5f2c353e632c393262cf06340c4fa7f1b40c4cbd36f90",
@@ -264,6 +271,7 @@ describe("AztecGateway7683", () => {
         AZTEC_7683_DOMAIN,
         "0xde47c9b27eb8d300dbb5f2c353e632c393262cf06340c4fa7f1b40c4cbd36f90",
         2 ** 32 - 1,
+        PUBLIC_ORDER_DATA
       ],
     )
 
@@ -349,6 +357,7 @@ describe("AztecGateway7683", () => {
         "uint32",
         "bytes32",
         "uint32",
+        "bytes32",
       ],
       [
         "0xde47c9b27eb8d300dbb5f2c353e632c393262cf06340c4fa7f1b40c4cbd36f90",
@@ -362,6 +371,7 @@ describe("AztecGateway7683", () => {
         AZTEC_7683_DOMAIN,
         "0xde47c9b27eb8d300dbb5f2c353e632c393262cf06340c4fa7f1b40c4cbd36f90",
         2 ** 32 - 1,
+        PRIVATE_ORDER_DATA
       ],
     )
 

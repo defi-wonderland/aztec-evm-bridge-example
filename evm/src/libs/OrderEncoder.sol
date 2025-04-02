@@ -15,8 +15,8 @@ struct OrderData {
     uint32 destinationDomain;
     bytes32 destinationSettler;
     uint32 fillDeadline;
+    bytes32 data;
 }
-// bytes data;
 
 library OrderEncoder {
     using BytesReader for bytes;
@@ -35,9 +35,9 @@ library OrderEncoder {
         "uint32 originDomain,",
         "uint32 destinationDomain,",
         "bytes32 destinationSettler,",
-        "uint32 fillDeadline)"
+        "uint32 fillDeadline,",
+        "bytes32 data)"
     );
-    //"bytes data)"
 
     bytes32 constant ORDER_DATA_TYPE_HASH = sha256(ORDER_DATA_TYPE);
 
@@ -61,12 +61,13 @@ library OrderEncoder {
             order.originDomain,
             order.destinationDomain,
             order.destinationSettler,
-            order.fillDeadline
+            order.fillDeadline,
+            order.data
         );
     }
 
     function decode(bytes memory orderBytes) internal pure returns (OrderData memory order) {
-        require(orderBytes.length == 268, InvalidOrderLength());
+        require(orderBytes.length == 300, InvalidOrderLength());
 
         order.sender = orderBytes.readBytes32(0);
         order.recipient = orderBytes.readBytes32(32);
@@ -79,6 +80,7 @@ library OrderEncoder {
         order.destinationDomain = orderBytes.readUint32(228);
         order.destinationSettler = orderBytes.readBytes32(232);
         order.fillDeadline = orderBytes.readUint32(264);
+        order.data = orderBytes.readBytes32(268);
 
         return order;
     }
