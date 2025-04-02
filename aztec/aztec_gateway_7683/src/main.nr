@@ -58,9 +58,10 @@ pub contract AztecGateway7683 {
     struct Storage<Context> {
         config: PublicImmutable<Config, Context>,
         claimable_orders: Map<Field, PublicMutable<Field, Context>, Context>,
-        open_orders: Map<Field, PublicMutable<[u8; 32], Context>, Context>, // order_data + order_type
+        open_orders: Map<Field, PublicMutable<[u8; 32], Context>, Context>,
         order_status: Map<Field, PublicMutable<u32, Context>, Context>,
         used_nonces: Map<AztecAddress, Map<Field, PublicMutable<bool, Context>, Context>, Context>,
+        order_filler_data: Map<Field, PublicMutable<[u8; 32], Context>, Context>,
     }
 
     #[public]
@@ -250,6 +251,15 @@ pub contract AztecGateway7683 {
             filler_data_bytes,
         )));
         storage.order_status.at(order_id).write(INITIATED_PRIVATELY);
+
+        // NOTE: At the moment, it is not possible to emit an event containing more than 13 fields.
+        // For this reason, it is not possible to emit the Filled event.
+        // In order for the user in the UI to be able to claim the tokens,
+        // they need to provide the order ID, the origin data, and the filler data.
+        // The first two are known by the user, but the filler data is not.
+        // As a provisional workaround, we store it so that the frontend can read it.
+        // https://github.com/AztecProtocol/aztec-packages/issues/11571
+        storage.order_filler_data.at(order_id).write(filler_data_bytes);
     }
 
     #[public]
@@ -262,6 +272,18 @@ pub contract AztecGateway7683 {
     #[view]
     fn get_config_private() -> Config {
         storage.config.read()
+    }
+
+    #[public]
+    #[view]
+    fn get_order_status(order_id_bytes: [u8; 32]) -> u32 {
+        storage.order_status.at(Field::from_be_bytes(order_id_bytes)).read()
+    }
+
+    #[public]
+    #[view]
+    fn get_order_filler_data(order_id_bytes: [u8; 32]) -> [u8; 32] {
+        storage.order_filler_data.at(Field::from_be_bytes(order_id_bytes)).read()
     }
 
     #[internal]
