@@ -1,6 +1,7 @@
 # Solver
 
 ## 📦 Installation
+
 Ensure you have [Bun](https://bun.sh) installed:
 
 ```sh
@@ -17,6 +18,7 @@ bun install
 ```
 
 ## 🔧 Usage
+
 Run the project with:
 
 ```sh
@@ -30,6 +32,7 @@ bun dev
 ```
 
 ## 🛠️ Building
+
 Compile TypeScript to JavaScript:
 
 ```sh
@@ -37,6 +40,7 @@ bun build src/index.ts --outdir=dist
 ```
 
 ## 🧪 Testing
+
 Run tests using Bun's built-in test runner:
 
 ```sh
