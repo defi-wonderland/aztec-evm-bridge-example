@@ -1,11 +1,17 @@
-import BaseService from "./BaseService"
 import { hexToBytes, padHex } from "viem"
 import { AztecAddress } from "@aztec/aztec.js"
 import { TokenContract, TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
 
 import { registerContract } from "../utils/aztec.js"
 import { AztecGateway7683Contract } from "../artifacts/AztecGateway7683/AztecGateway7683.js"
-import { AZTEC_7683_CHAIN_ID, ORDER_FILLED, ORDER_INITIATED_PRIVATELY, PRIVATE_ORDER_DATA } from "../constants.js"
+import {
+  AZTEC_7683_CHAIN_ID,
+  ORDER_FILLED,
+  ORDER_STATUS_FILLED,
+  ORDER_STATUS_INITIATED_PRIVATELY,
+  PRIVATE_ORDER_DATA,
+} from "../constants.js"
+import BaseService from "./BaseService"
 
 import type { Log, PublicClient, WalletClient } from "viem"
 import type { Wallet } from "@aztec/aztec.js"
@@ -32,7 +38,7 @@ class OrderService extends BaseService {
     this.monitorInitiadedPrivatelyOrders()
     setInterval(() => {
       this.monitorInitiadedPrivatelyOrders()
-    }, 5000)
+    }, 30000)
   }
 
   async monitorInitiadedPrivatelyOrders(): Promise<void> {
@@ -42,11 +48,11 @@ class OrderService extends BaseService {
       const orders = await this.db
         .collection("orders")
         .find({
-          status: "initiatedPrivately",
+          status: ORDER_STATUS_INITIATED_PRIVATELY,
         })
         .toArray()
       if (orders.length === 0) {
-        this.logger.info("no settlable orders found ...")
+        this.logger.info("no orders initiated privately found ...")
         return
       }
 
@@ -55,12 +61,24 @@ class OrderService extends BaseService {
         this.aztecWallet,
       )
 
-      /*const orderIds = orders.map(({ orderId }) => orderId)
+      const orderIds = orders.map(({ orderId }) => orderId)
       const newOrdersStatus = await Promise.all(
         orderIds.map((orderId) => gateway.methods.get_order_status(Array.from(hexToBytes(orderId))).simulate()),
-      )*/
+      )
 
-      //console.log("newOrdersStatus", newOrdersStatus)
+      const filledOrderIds = orderIds.filter((_, index) => newOrdersStatus[index] === ORDER_FILLED)
+      if (filledOrderIds.length === 0) {
+        this.logger.info("no orders filled privately found ...")
+        return
+      }
+
+      this.logger.info(`orders ${filledOrderIds.join(",")} has been filled. updating db ...`)
+      await this.db.collection("orders").updateMany(
+        {
+          orderId: { $in: filledOrderIds },
+        },
+        { $set: { status: ORDER_STATUS_FILLED } },
+      )
     } catch (err) {
       this.logger.error(err)
     }
@@ -74,6 +92,8 @@ class OrderService extends BaseService {
           resolvedOrder: { fillInstructions, maxSpent, minReceived },
         },
       } = log as any
+
+      this.logger.info(`new order detect: ${orderId}. processing it ...`)
 
       const originData = fillInstructions[0].originData
       const minReceivedAmount = minReceived[0].amount
@@ -108,7 +128,7 @@ class OrderService extends BaseService {
         AztecGateway7683Contract.at(AztecAddress.fromString(this.aztecGatewayContractAddress), this.aztecWallet),
       ])
 
-      this.logger.info("setting public auth with to fill the order ...")
+      this.logger.info(`setting public auth with to fill the order ${orderId} ...`)
       await (
         await this.aztecWallet.setPublicAuthWit(
           {
@@ -126,11 +146,12 @@ class OrderService extends BaseService {
         .send()
         .wait()
 
-      const orderStatus = "0x" + originData.slice(-64) === PRIVATE_ORDER_DATA ? ORDER_INITIATED_PRIVATELY : ORDER_FILLED
+      const orderStatus =
+        "0x" + originData.slice(-64) === PRIVATE_ORDER_DATA ? ORDER_STATUS_INITIATED_PRIVATELY : ORDER_STATUS_FILLED
 
       let receipt
-      if (orderStatus === ORDER_INITIATED_PRIVATELY) {
-        this.logger.info("filling the private order ...")
+      if (orderStatus === ORDER_STATUS_INITIATED_PRIVATELY) {
+        this.logger.info(`filling the private order ${orderId} ...`)
         receipt = await aztecGateway
           .withWallet(this.aztecWallet)
           .methods.fill_private(
@@ -141,7 +162,7 @@ class OrderService extends BaseService {
           .send()
           .wait()
       } else {
-        this.logger.info("filling the public order ...")
+        this.logger.info(`filling the public order ${orderid} ...`)
         receipt = await aztecGateway
           .withWallet(this.aztecWallet)
           .methods.fill(
@@ -153,7 +174,7 @@ class OrderService extends BaseService {
           .wait()
       }
 
-      this.logger.info(`order filled succesfully: ${receipt.txHash.toString()}. storing it ...`)
+      this.logger.info(`order ${orderId} filled succesfully. tx hash: ${receipt.txHash.toString()}. storing it ...`)
 
       await this.db.collection("orders").findOneAndUpdate(
         { id: orderId },
