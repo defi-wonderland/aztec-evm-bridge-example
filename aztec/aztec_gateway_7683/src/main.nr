@@ -23,6 +23,7 @@ pub contract AztecGateway7683 {
     use crate::{
         config::Config,
         types::{
+            events::Filled,
             helpers::InternalRCOParams,
             onchain_cross_chain_order::OnchainCrossChainOrder,
             order_data::{ORDER_DATA_LENGTH, ORDER_DATA_TYPE, OrderData},
@@ -34,25 +35,11 @@ pub contract AztecGateway7683 {
         utils::{u8_32_to_aztec_address, u8_32_to_u128},
     };
     use dep::aztec::{
-        event::event_interface::EventInterface,
-        macros::{
-            events::event,
-            functions::{initializer, internal, private, public, view},
-            storage::storage,
-        },
+        macros::{functions::{initializer, internal, private, public, view}, storage::storage},
         prelude::{AztecAddress, EthAddress, Map, PublicImmutable, PublicMutable},
-        protocol_types::{hash::sha256_to_field, traits::Serialize},
-        unencrypted_logs::unencrypted_event_emission::encode_event,
+        protocol_types::{hash::sha256_to_field, traits::Packable},
     };
     use token::Token;
-
-    #[derive(Serialize)]
-    #[event]
-    struct Filled {
-        order_id: [u8; 32],
-        origin_data: [u8; ORDER_DATA_LENGTH],
-        filler_data: [u8; 32],
-    }
 
     #[storage]
     struct Storage<Context> {
@@ -61,7 +48,6 @@ pub contract AztecGateway7683 {
         open_orders: Map<Field, PublicMutable<[u8; 32], Context>, Context>,
         order_status: Map<Field, PublicMutable<u32, Context>, Context>,
         used_nonces: Map<AztecAddress, Map<Field, PublicMutable<bool, Context>, Context>, Context>,
-        order_filler_data: Map<Field, PublicMutable<[u8; 32], Context>, Context>,
     }
 
     #[public]
@@ -169,7 +155,6 @@ pub contract AztecGateway7683 {
         );
 
         // TODO: store filled order
-        // TODO: emit event
 
         AztecGateway7683::at(context.this_address())
             ._trigger_settlement(
@@ -218,8 +203,12 @@ pub contract AztecGateway7683 {
             )
             .call(&mut context);
 
-        // TODO: "Emitted public log is too large, max: 13, passed: 333"
-        // Filled { order_id: order_id_bytes, origin_data: origin_data_bytes, filler_data: filler_data_bytes }.emit(encode_event(&mut context));
+        context.emit_public_log(Filled {
+            order_id: order_id_bytes,
+            origin_data: origin_data_bytes,
+            filler_data: filler_data_bytes,
+        }
+            .pack());
     }
 
     #[public]
@@ -254,14 +243,12 @@ pub contract AztecGateway7683 {
         )));
         storage.order_status.at(order_id).write(INITIATED_PRIVATELY);
 
-        // NOTE: At the moment, it is not possible to emit an event containing more than 13 fields.
-        // For this reason, it is not possible to emit the Filled event.
-        // In order for the user in the UI to be able to claim the tokens,
-        // they need to provide the order ID, the origin data, and the filler data.
-        // The first two are known by the user, but the filler data is not.
-        // As a provisional workaround, we store it so that the frontend can read it.
-        // https://github.com/AztecProtocol/aztec-packages/issues/11571
-        storage.order_filler_data.at(order_id).write(filler_data_bytes);
+        context.emit_public_log(Filled {
+            order_id: order_id_bytes,
+            origin_data: origin_data_bytes,
+            filler_data: filler_data_bytes,
+        }
+            .pack());
     }
 
     #[public]
@@ -280,12 +267,6 @@ pub contract AztecGateway7683 {
     #[view]
     fn get_order_status(order_id_bytes: [u8; 32]) -> u32 {
         storage.order_status.at(Field::from_be_bytes(order_id_bytes)).read()
-    }
-
-    #[public]
-    #[view]
-    fn get_order_filler_data(order_id_bytes: [u8; 32]) -> [u8; 32] {
-        storage.order_filler_data.at(Field::from_be_bytes(order_id_bytes)).read()
     }
 
     #[internal]
