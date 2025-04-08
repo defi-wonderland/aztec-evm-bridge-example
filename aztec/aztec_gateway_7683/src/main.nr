@@ -16,8 +16,8 @@ pub contract AztecGateway7683 {
     global INITIATED_PRIVATELY: u32 = 3;
 
     global SETTLE_ORDER_TYPE: [u8; 32] = [
-        100, 26, 150, 232, 234, 193, 205, 65, 73, 216, 31, 243, 122, 123, 194, 24, 136, 159, 246,
-        156, 124, 228, 38, 13, 122, 9, 202, 154, 234, 92, 186, 189,
+        25, 30, 167, 118, 189, 110, 12, 213, 106, 109, 68, 186, 74, 234, 47, 236, 70, 139, 74, 11,
+        76, 29, 136, 13, 64, 37, 146, 158, 235, 97, 93, 13,
     ]; // sha256("SETTLE_ORDER_TYPE")
 
     use crate::{
@@ -48,6 +48,7 @@ pub contract AztecGateway7683 {
         open_orders: Map<Field, PublicMutable<[u8; 32], Context>, Context>,
         order_status: Map<Field, PublicMutable<u32, Context>, Context>,
         used_nonces: Map<AztecAddress, Map<Field, PublicMutable<bool, Context>, Context>, Context>,
+        filled_orders_block_numbers: Map<Field, PublicMutable<Field, Context>, Context>,
     }
 
     #[public]
@@ -158,6 +159,7 @@ pub contract AztecGateway7683 {
 
         AztecGateway7683::at(context.this_address())
             ._trigger_settlement(
+                order_id,
                 order_id_bytes,
                 filler_data_bytes, // at the moment filler data contains the ethereum address where the filler wants to receive the funds during the settlement
             )
@@ -198,6 +200,7 @@ pub contract AztecGateway7683 {
 
         AztecGateway7683::at(context.this_address())
             ._trigger_settlement(
+                order_id,
                 order_id_bytes,
                 filler_data_bytes, // at the moment filler data contains the ethereum address where the filler wants to receive the funds during the settlement
             )
@@ -269,6 +272,12 @@ pub contract AztecGateway7683 {
         storage.order_status.at(Field::from_be_bytes(order_id_bytes)).read()
     }
 
+    #[public]
+    #[view]
+    fn get_filled_order_block_number(order_id_bytes: [u8; 32]) -> Field {
+        storage.filled_orders_block_numbers.at(Field::from_be_bytes(order_id_bytes)).read()
+    }
+
     #[internal]
     #[public]
     fn _assert_nonce_and_set_order_details(
@@ -305,12 +314,6 @@ pub contract AztecGateway7683 {
 
     #[public]
     #[internal]
-    fn _update_order_status(order_id: Field, status: u32) {
-        storage.order_status.at(order_id).write(status);
-    }
-
-    #[public]
-    #[internal]
     fn _check_order_commitment(
         order_id: Field,
         origin_data_bytes: [u8; ORDER_DATA_LENGTH],
@@ -326,13 +329,15 @@ pub contract AztecGateway7683 {
 
     #[public]
     #[internal]
-    fn _trigger_settlement(order_id_bytes: [u8; 32], filler_data: [u8; 32]) {
+    fn _trigger_settlement(order_id: Field, order_id_bytes: [u8; 32], filler_data: [u8; 32]) {
+        storage.filled_orders_block_numbers.at(order_id).write(context.block_number());
+
         let mut settlement_message_bytes: [u8; 96] = [0; 96];
 
         for i in 0..32 {
             settlement_message_bytes[i] = SETTLE_ORDER_TYPE[i]; // order_type
             settlement_message_bytes[i + 32] = order_id_bytes[i]; // order_id_bytes
-            settlement_message_bytes[i + 54] = filler_data[i]; // recipient
+            settlement_message_bytes[i + 64] = filler_data[i]; // recipient
         }
 
         let config = storage.config.read();
@@ -405,5 +410,11 @@ pub contract AztecGateway7683 {
             pre_image[i + ORDER_DATA_LENGTH] = filler_data_bytes[i];
         }
         pre_image
+    }
+
+    #[public]
+    #[internal]
+    fn _update_order_status(order_id: Field, status: u32) {
+        storage.order_status.at(order_id).write(status);
     }
 }

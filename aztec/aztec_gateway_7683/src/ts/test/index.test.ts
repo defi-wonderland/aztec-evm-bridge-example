@@ -19,11 +19,10 @@ import { computePartialAddress } from "@aztec/stdlib/contract"
 
 import { AztecGateway7683Contract } from "../../artifacts/AztecGateway7683.js"
 import { TokenContract } from "../../artifacts/Token.js"
-import { PublicLog } from "@aztec/stdlib/logs"
 
 const MNEMONIC = "test test test test test test test test test test test junk"
 const PORTAL_ADDRESS = EthAddress.ZERO
-const SETTLE_ORDER_TYPE = "641a96e8eac1cd4149d81ff37a7bc218889ff69c7ce4260d7a09ca9aea5cbabd"
+const SETTLE_ORDER_TYPE = "191ea776bd6e0cd56a6d44ba4aea2fec468b4a0b4c1d880d4025929eeb615d0d"
 const ORDER_DATA_TYPE = "0xce57c37dfc5b92296648c64d29544cc620ec6dee71a883e75186bca75bca436c"
 const SECRET = padHex(("0x" + Buffer.from("secret", "utf-8").toString("hex")) as `0x${string}`)
 const SECRET_HASH = sha256(SECRET)
@@ -358,8 +357,12 @@ describe("AztecGateway7683", () => {
       new Fr(publicClient.chain.id).toBuffer(),
       content.toBuffer(),
     ])
+
+    const filledOrderBlockNumber = await gateway.methods
+      .get_filled_order_block_number(Array.from(hexToBytes(orderId)))
+      .simulate()
     const [l2ToL1MessageIndex, siblingPath] = await pxe.getL2ToL1MembershipWitness(
-      await pxe.getBlockNumber(),
+      parseInt(filledOrderBlockNumber),
       l2ToL1Message,
     )
 
