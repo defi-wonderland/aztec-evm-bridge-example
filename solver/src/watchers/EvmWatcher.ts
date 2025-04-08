@@ -20,8 +20,8 @@ class EvmWatcher {
   contractAddress: `0x${string}`
   abi: any
   eventName: string
-  private _lastBlock: bigint
-  private _watchIntervalTimeMs: number
+  private lastBlock: bigint
+  private watchIntervalTimeMs: number
 
   constructor(configs: WatcherConfigs) {
     this.logger = configs.logger.child({ service: configs.service })
@@ -30,31 +30,31 @@ class EvmWatcher {
     this.abi = configs.abi
     this.eventName = configs.eventName
     this.onLogs = configs.onLogs
-    this._watchIntervalTimeMs = configs.watchIntervalTimeMs
+    this.watchIntervalTimeMs = configs.watchIntervalTimeMs
 
-    this._lastBlock = 0n
+    this.lastBlock = 0n
   }
 
   async start() {
     try {
-      this._watch()
+      this.watch()
       setInterval(() => {
-        this._watch()
-      }, this._watchIntervalTimeMs)
+        this.watch()
+      }, this.watchIntervalTimeMs)
     } catch (_err) {}
   }
 
-  private async _watch() {
+  private async watch() {
     try {
       const currentBlock = await this.client.getBlockNumber()
-      if (!this._lastBlock) {
-        this._lastBlock = currentBlock - 1n
+      if (!this.lastBlock) {
+        this.lastBlock = currentBlock - 1n
       }
 
-      const fromBlock = this._lastBlock + 1n
+      const fromBlock = this.lastBlock + 1n
       const toBlock = currentBlock
       this.logger.info(
-        `looking for ${this.eventName} events from block ${fromBlock} to block ${toBlock} on ${this.client.chain.name} ...`,
+        `looking for ${this.eventName} events from block ${fromBlock} to block ${toBlock} on ${this.client.chain!.name} ...`,
       )
 
       const filter = await this.client.createContractEventFilter({
@@ -75,7 +75,7 @@ class EvmWatcher {
         this.logger.info("Events succesfully processed.")
       }
 
-      this._lastBlock = currentBlock
+      this.lastBlock = currentBlock
     } catch (_err) {
       this.logger.error(`${_err}`)
     }
