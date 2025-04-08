@@ -25,7 +25,7 @@ contract Forwarder is IForwarder {
         uint256 leafIndex,
         bytes32[] calldata path
     ) external {
-        bytes32 messageHash = sha256(message);
+        bytes32 messageHash = sha256(message) >> 8; // Represent it as an Aztec field element (BN254 scalar, encoded as bytes32)
         require(messageHash == l2ToL1Message.content, InvalidContent());
         require(l2ToL1Message.sender.actor == AZTEC_GATEWAY, InvalidSender()); // TODO: version?
         // NOTE: recipient correctness is checked by Outbox

@@ -43,7 +43,7 @@ contract L2Gateway7683 is IL2Gateway7683, BasicSwap7683 {
     }
 
     function _getStorageKeyByMessage(bytes memory message) internal pure returns (bytes32) {
-        return keccak256(abi.encode(sha256(message), FORWARDER_SETTLE_ORDER_SLOTS));
+        return keccak256(abi.encode(sha256(message) >> 8, FORWARDER_SETTLE_ORDER_SLOTS)); // Represent it as an Aztec field element (BN254 scalar, encoded as bytes32)
     }
 
     function _localDomain() internal view override returns (uint32) {
