@@ -5,6 +5,7 @@ import { waitForTransactionReceipt } from "viem/actions"
 const { ssz } = await import("@lodestar/types")
 const { BeaconBlock, SignedBeaconBlock } = ssz.electra
 const { createProof, ProofType } = await import("@chainsafe/persistent-merkle-tree")
+import { Mutex } from "async-mutex"
 
 import BaseService from "./BaseService"
 import {
@@ -65,6 +66,8 @@ class SettlementService extends BaseService {
   l2EvmChain: Chain
   l2EvmGatewayAddress: `0x${string}`
   pxe: PXE
+  forwardOrderSettlementMutex: Mutex
+  settleOrderMutex: Mutex
 
   constructor(opts: SettlementServiceOpts) {
     super(opts)
@@ -80,9 +83,12 @@ class SettlementService extends BaseService {
     this.l2EvmGatewayAddress = opts.l2EvmGatewayAddress
     this.beaconApiUrl = opts.beaconApiUrl
 
-    this.forwardOrdersSettlment()
+    this.forwardOrderSettlementMutex = new Mutex()
+    this.settleOrderMutex = new Mutex()
+
+    this.forwardOrderSettlements()
     setInterval(() => {
-      this.forwardOrdersSettlment()
+      this.forwardOrderSettlements()
     }, 30000)
 
     this.settleOrders()
@@ -91,7 +97,7 @@ class SettlementService extends BaseService {
     }, 30000)
   }
 
-  async forwardOrdersSettlment() {
+  async forwardOrderSettlements() {
     try {
       this.logger.info("looking for forwarding order settlements ....")
       const orders = await this.db
@@ -118,6 +124,7 @@ class SettlementService extends BaseService {
   }
 
   async forwardOrderSettlment(order: Order) {
+    const release = await this.forwardOrderSettlementMutex.acquire()
     try {
       // TODO: distinguish the chains
 
@@ -188,6 +195,8 @@ class SettlementService extends BaseService {
     } catch (err) {
       this.logger.error(err)
       throw err
+    } finally {
+      release()
     }
   }
 
@@ -218,6 +227,7 @@ class SettlementService extends BaseService {
   }
 
   async settleOrder(order: Order) {
+    const release = await this.settleOrderMutex.acquire()
     try {
       this.logger.info(`settling order ${order.orderId} ...`)
 
@@ -277,7 +287,7 @@ class SettlementService extends BaseService {
         abi: l2Gateway7683Abi,
       })
       this.logger.info(`waiting for transaction confirmation of ${settleTxHash} ...`)
-      await waitForTransactionReceipt(l1Client, { hash: settleTxHash })
+      await waitForTransactionReceipt(l2EvmClient, { hash: settleTxHash })
 
       this.logger.info(`order ${order.orderId} succesfully settled. tx hash: ${settleTxHash}`)
       await this.db.collection("orders").findOneAndUpdate(
@@ -293,6 +303,8 @@ class SettlementService extends BaseService {
     } catch (err) {
       this.logger.error(err)
       throw err
+    } finally {
+      release()
     }
   }
 }

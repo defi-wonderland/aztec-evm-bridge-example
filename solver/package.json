@@ -18,6 +18,7 @@
     "@chainsafe/persistent-merkle-tree": "^1.1.0",
     "@chainsafe/ssz": "^1.2.0",
     "@lodestar/types": "^1.27.1",
+    "async-mutex": "^0.5.0",
     "dotenv": "^16.4.7",
     "mongodb": "^6.15.0",
     "viem": "^2.23.11",

@@ -1,6 +1,7 @@
 import { padHex } from "viem"
 import { AztecAddress } from "@aztec/aztec.js"
 import { TokenContract, TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
+import { Mutex } from "async-mutex"
 
 import { registerContract } from "../utils/aztec.js"
 import { AztecGateway7683Contract } from "../artifacts/AztecGateway7683/AztecGateway7683.js"
@@ -31,6 +32,7 @@ class OrderService extends BaseService {
   aztecGatewayAddress: `0x${string}`
   evmMultiClient: MultiClient
   l2EvmChain: Chain
+  fillEvmOrderFromLogMutex: Mutex
 
   constructor(opts: OrderServiceOpts) {
     super(opts)
@@ -39,6 +41,8 @@ class OrderService extends BaseService {
     this.evmMultiClient = opts.evmMultiClient
     this.aztecGatewayAddress = opts.aztecGatewayAddress
     this.l2EvmChain = opts.l2EvmChain
+
+    this.fillEvmOrderFromLogMutex = new Mutex()
 
     this.monitorInitiadedPrivatelyOrders()
     setInterval(() => {
@@ -90,6 +94,7 @@ class OrderService extends BaseService {
   }
 
   async fillEvmOrderFromLog(log: Log): Promise<void> {
+    const release = await this.fillEvmOrderFromLogMutex.acquire()
     try {
       const {
         args: {
@@ -189,6 +194,8 @@ class OrderService extends BaseService {
     } catch (err) {
       this.logger.error(err)
       throw err
+    } finally {
+      release()
     }
   }
 }
