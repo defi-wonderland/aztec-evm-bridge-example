@@ -4,7 +4,6 @@ This project defines an Aztec-compatible Noir contract implementing an **ERC-768
 
 > This contract is intended for use with the [Aztec Protocol](https://github.com/AztecProtocol) stack and depends on their custom build tooling (`aztec-nargo`).
 
----
 
 ## 🛠 Getting Started
 
@@ -19,7 +18,6 @@ This guide walks you through:
 - Compiling Noir contracts with `aztec-nargo`
 - Using the Aztec wallet CLI
 
----
 
 ## 🔨 Build Instructions
 
@@ -42,7 +40,6 @@ aztec-nargo compile --package token_contract
 cp ~/nargo/github.com/AztecProtocol/aztec-packages/v0.81.0/noir-projects/noir-contracts/target/token_contract-Token.json ./target/token_contract-Token.json
 ```
 
----
 
 ## 🧪 Testing
 
