@@ -1,11 +1,12 @@
 import { getDeployedTestAccountsWallets } from "@aztec/accounts/testing"
-import { Wallet, createAztecNodeClient, createPXEClient, AztecAddress } from "@aztec/aztec.js"
+import { createAztecNodeClient, createPXEClient, AztecAddress, waitForPXE } from "@aztec/aztec.js"
+
+import type { AztecNode, ContractInstanceWithAddress, PXE, Wallet } from "@aztec/aztec.js"
 
 export const getAztecWallet = async (): Promise<Wallet> => {
-  const PXE_URL = process.env.PXE_URL || "http://localhost:8080"
-  const pxe = createPXEClient(PXE_URL)
+  const pxe = await getPxe()
   const wallet = (await getDeployedTestAccountsWallets(pxe))[0]
-  return wallet
+  return wallet as Wallet
 }
 
 type RegisterContractOptions = {
@@ -13,14 +14,24 @@ type RegisterContractOptions = {
   artifact: any
 }
 
+export const getPxe = async (): Promise<PXE> => {
+  const pxe = createPXEClient(process.env.PXE_URL || "http://localhost:8080")
+  await waitForPXE(pxe)
+  return pxe
+}
+
+export const getAztecNode = async (): Promise<AztecNode> => {
+  return await createAztecNodeClient(process.env.PXE_URL || "http://localhost:8080")
+}
+
 export const registerContract = async (
   address: AztecAddress,
   { wallet, artifact }: RegisterContractOptions,
 ): Promise<void> => {
-  const node = await createAztecNodeClient(process.env.PXE_URL || "http://localhost:8080")
+  const node = await getAztecNode()
   const contractInstance = await node.getContract(address)
   await wallet.registerContract({
-    instance: contractInstance,
+    instance: contractInstance as ContractInstanceWithAddress,
     artifact,
   })
 }

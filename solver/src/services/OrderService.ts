@@ -1,4 +1,4 @@
-import { hexToBytes, padHex } from "viem"
+import { padHex } from "viem"
 import { AztecAddress } from "@aztec/aztec.js"
 import { TokenContract, TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
 
@@ -12,28 +12,33 @@ import {
   PRIVATE_ORDER_DATA,
 } from "../constants.js"
 import BaseService from "./BaseService"
+import { hexToUintArray } from "../utils/bytes.js"
 
-import type { Log, PublicClient, WalletClient } from "viem"
+import type { Chain, Log, PublicClient, WalletClient } from "viem"
 import type { Wallet } from "@aztec/aztec.js"
 import type { BaseServiceOpts } from "./BaseService"
+import type MultiClient from "../MultiClient.js"
 
 export type OrderServiceOpts = BaseServiceOpts & {
   aztecWallet: Wallet
-  aztecGatewayContractAddress: `0x${string}`
-  evmWallet: PublicClient & WalletClient
+  aztecGatewayAddress: `0x${string}`
+  evmMultiClient: MultiClient
+  l2EvmChain: Chain
 }
 
 class OrderService extends BaseService {
   aztecWallet: Wallet
-  aztecGatewayContractAddress: `0x${string}`
-  evmWallet: PublicClient & WalletClient
+  aztecGatewayAddress: `0x${string}`
+  evmMultiClient: MultiClient
+  l2EvmChain: Chain
 
-  constructor(opts: OrderService) {
+  constructor(opts: OrderServiceOpts) {
     super(opts)
 
     this.aztecWallet = opts.aztecWallet
-    this.evmWallet = opts.evmWallet
-    this.aztecGatewayContractAddress = opts.aztecGatewayContractAddress
+    this.evmMultiClient = opts.evmMultiClient
+    this.aztecGatewayAddress = opts.aztecGatewayAddress
+    this.l2EvmChain = opts.l2EvmChain
 
     this.monitorInitiadedPrivatelyOrders()
     setInterval(() => {
@@ -43,7 +48,7 @@ class OrderService extends BaseService {
 
   async monitorInitiadedPrivatelyOrders(): Promise<void> {
     try {
-      this.logger.info("looking for settlable orders ...")
+      this.logger.info("looking for initiated privately orders ...")
 
       const orders = await this.db
         .collection("orders")
@@ -57,13 +62,13 @@ class OrderService extends BaseService {
       }
 
       const gateway = await AztecGateway7683Contract.at(
-        AztecAddress.fromString(this.aztecGatewayContractAddress),
+        AztecAddress.fromString(this.aztecGatewayAddress),
         this.aztecWallet,
       )
 
       const orderIds = orders.map(({ orderId }) => orderId)
       const newOrdersStatus = await Promise.all(
-        orderIds.map((orderId) => gateway.methods.get_order_status(Array.from(hexToBytes(orderId))).simulate()),
+        orderIds.map((orderId) => gateway.methods.get_order_status(hexToUintArray(orderId)).simulate()),
       )
 
       const filledOrderIds = orderIds.filter((_, index) => newOrdersStatus[index] === ORDER_FILLED)
@@ -125,17 +130,17 @@ class OrderService extends BaseService {
 
       const [token, aztecGateway] = await Promise.all([
         TokenContract.at(AztecAddress.fromString(maxSpentToken), this.aztecWallet),
-        AztecGateway7683Contract.at(AztecAddress.fromString(this.aztecGatewayContractAddress), this.aztecWallet),
+        AztecGateway7683Contract.at(AztecAddress.fromString(this.aztecGatewayAddress), this.aztecWallet),
       ])
 
       this.logger.info(`setting public auth with to fill the order ${orderId} ...`)
       await (
         await this.aztecWallet.setPublicAuthWit(
           {
-            caller: AztecAddress.fromString(this.aztecGatewayContractAddress),
+            caller: AztecAddress.fromString(this.aztecGatewayAddress),
             action: token.methods.transfer_in_public(
               this.aztecWallet.getAddress(),
-              AztecAddress.fromString(this.aztecGatewayContractAddress),
+              AztecAddress.fromString(this.aztecGatewayAddress),
               maxSpentAmount,
               0,
             ),
@@ -149,27 +154,20 @@ class OrderService extends BaseService {
       const orderStatus =
         "0x" + originData.slice(-64) === PRIVATE_ORDER_DATA ? ORDER_STATUS_INITIATED_PRIVATELY : ORDER_STATUS_FILLED
 
+      const fillerData = padHex(this.evmMultiClient.getClientByChain(this.l2EvmChain).account!.address)
       let receipt
       if (orderStatus === ORDER_STATUS_INITIATED_PRIVATELY) {
         this.logger.info(`filling the private order ${orderId} ...`)
         receipt = await aztecGateway
           .withWallet(this.aztecWallet)
-          .methods.fill_private(
-            Array.from(hexToBytes(orderId)),
-            Array.from(hexToBytes(originData)),
-            Array.from(hexToBytes(padHex(this.evmWallet.account.address))),
-          )
+          .methods.fill_private(hexToUintArray(orderId), hexToUintArray(originData), hexToUintArray(fillerData))
           .send()
           .wait()
       } else {
-        this.logger.info(`filling the public order ${orderid} ...`)
+        this.logger.info(`filling the public order ${orderId} ...`)
         receipt = await aztecGateway
           .withWallet(this.aztecWallet)
-          .methods.fill(
-            Array.from(hexToBytes(orderId)),
-            Array.from(hexToBytes(originData)),
-            Array.from(hexToBytes(padHex(this.evmWallet.account.address))),
-          )
+          .methods.fill(hexToUintArray(orderId), hexToUintArray(originData), hexToUintArray(fillerData))
           .send()
           .wait()
       }
@@ -177,14 +175,12 @@ class OrderService extends BaseService {
       this.logger.info(`order ${orderId} filled succesfully. tx hash: ${receipt.txHash.toString()}. storing it ...`)
 
       await this.db.collection("orders").findOneAndUpdate(
-        { id: orderId },
+        { orderId },
         {
-          $addToSet: {
-            confirmedBy: orderId,
-          },
           $setOnInsert: {
             ...(log as any).args,
             fillTxHash: receipt.txHash.toString(),
+            fillerData,
             status: orderStatus,
           },
         },
