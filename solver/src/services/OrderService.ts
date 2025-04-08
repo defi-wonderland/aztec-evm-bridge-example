@@ -1,4 +1,4 @@
-import { padHex } from "viem"
+import { hexToBytes, padHex } from "viem"
 import { AztecAddress } from "@aztec/aztec.js"
 import { TokenContract, TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
 import { Mutex } from "async-mutex"
@@ -10,7 +10,7 @@ import {
   ORDER_FILLED,
   ORDER_STATUS_FILLED,
   ORDER_STATUS_INITIATED_PRIVATELY,
-  PRIVATE_ORDER_DATA,
+  PRIVATE_ORDER_HEX,
 } from "../constants.js"
 import BaseService from "./BaseService"
 import { hexToUintArray } from "../utils/bytes.js"
@@ -156,8 +156,8 @@ class OrderService extends BaseService {
         .send()
         .wait()
 
-      const orderStatus =
-        "0x" + originData.slice(-64) === PRIVATE_ORDER_DATA ? ORDER_STATUS_INITIATED_PRIVATELY : ORDER_STATUS_FILLED
+      const orderType = `0x${originData.slice(538, 540)}`
+      const orderStatus = orderType === PRIVATE_ORDER_HEX ? ORDER_STATUS_INITIATED_PRIVATELY : ORDER_STATUS_FILLED
 
       const fillerData = padHex(this.evmMultiClient.getClientByChain(this.l2EvmChain).account!.address)
       let receipt

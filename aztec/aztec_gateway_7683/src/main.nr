@@ -26,7 +26,9 @@ pub contract AztecGateway7683 {
             events::Filled,
             helpers::InternalRCOParams,
             onchain_cross_chain_order::OnchainCrossChainOrder,
-            order_data::{ORDER_DATA_LENGTH, ORDER_DATA_TYPE, OrderData},
+            order_data::{
+                ORDER_DATA_LENGTH, ORDER_DATA_TYPE, OrderData, PRIVATE_ORDER, PUBLIC_ORDER,
+            },
             resolved_cross_chain_order::{
                 FILL_INSTRUCTIONS_MAX_INSTRUCTIONS, FillInstruction, MAX_SPENT_MAX_OUTPUTS,
                 MIN_RECEIVED_MAX_OUTPUTS, Output, ResolvedCrossChainOrder,
@@ -67,6 +69,7 @@ pub contract AztecGateway7683 {
         let order_id = data.order_id;
         let nonce = Field::from_be_bytes(order_data.sender_nonce);
 
+        assert(order_data.order_type == PUBLIC_ORDER, "Not a public order");
         assert(order_data.origin_domain == LOCAL_DESTINATION_DOMAIN, "Invalid order origin domain");
         assert(!storage.used_nonces.at(context.msg_sender()).at(nonce).read(), "Invalid nonce");
 
@@ -104,6 +107,7 @@ pub contract AztecGateway7683 {
         let order_id = data.order_id;
         let nonce = Field::from_be_bytes(order_data.sender_nonce);
 
+        assert(order_data.order_type == PRIVATE_ORDER, "Not a private order");
         assert(order_data.origin_domain == LOCAL_DESTINATION_DOMAIN, "Invalid order origin domain");
         AztecGateway7683::at(context.this_address())
             ._assert_nonce_and_set_order_details(order_id, order.order_data, nonce)

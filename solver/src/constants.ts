@@ -4,8 +4,8 @@ export const AZTEC_7683_CHAIN_ID = 999999n
 
 export const ORDER_DATA_TYPE = "0xce57c37dfc5b92296648c64d29544cc620ec6dee71a883e75186bca75bca436c"
 export const SETTLE_ORDER_TYPE = "0x191ea776bd6e0cd56a6d44ba4aea2fec468b4a0b4c1d880d4025929eeb615d0d"
-export const PUBLIC_ORDER_DATA = "0xefa1f375d76194fa51a3556a97e641e61685f914d446979da50a551a4333ffd7" // sha256("public")
-export const PRIVATE_ORDER_DATA = "0x715dc8493c36579a5b116995100f635e3572fdf8703e708ef1a08d943b36774e" // sha256("private")
+export const PUBLIC_ORDER_HEX = "0x00"
+export const PRIVATE_ORDER_HEX = "0x01"
 
 export const ORDER_STATUS_INITIATED_PRIVATELY = "initiatedPrivately"
 export const ORDER_STATUS_FILLED = "filled"

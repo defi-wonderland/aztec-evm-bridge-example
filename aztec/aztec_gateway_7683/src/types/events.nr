@@ -9,7 +9,7 @@ pub struct Filled {
     pub filler_data: [u8; 32],
 }
 
-// ORDER_DATA_LENGTH + 32 + 32 = 364    364 / 32 = 11.375 -> 12 + 1 (residual bytes) = 13
+// 301 + 32 + 32 = 365      365 / 31 = 11.74 = 12 + 1 (residual bytes) = 13
 impl Packable<13> for Filled {
     fn pack(self) -> [Field; 13] {
         let mut result: [Field; 13] = [0; 13];

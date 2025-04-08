@@ -25,4 +25,11 @@ library BytesReader {
             result := shr(224, word) // shift down to get the top 4 bytes
         }
     }
+
+    function readUint8(bytes memory data, uint256 offset) internal pure returns (uint8 result) {
+        require(data.length > offset, OutOfRange());
+        assembly {
+            result := byte(0, mload(add(add(data, 32), offset)))
+        }
+    }
 }

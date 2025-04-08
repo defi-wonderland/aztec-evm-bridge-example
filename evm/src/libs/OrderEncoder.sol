@@ -15,6 +15,7 @@ struct OrderData {
     uint32 destinationDomain;
     bytes32 destinationSettler;
     uint32 fillDeadline;
+    uint8 orderType;
     bytes32 data;
 }
 
@@ -36,6 +37,7 @@ library OrderEncoder {
         "uint32 destinationDomain,",
         "bytes32 destinationSettler,",
         "uint32 fillDeadline,",
+        "uint8 orderType,",
         "bytes32 data)"
     );
 
@@ -62,12 +64,13 @@ library OrderEncoder {
             order.destinationDomain,
             order.destinationSettler,
             order.fillDeadline,
+            order.orderType,
             order.data
         );
     }
 
     function decode(bytes memory orderBytes) internal pure returns (OrderData memory order) {
-        require(orderBytes.length == 300, InvalidOrderLength());
+        require(orderBytes.length == 301, InvalidOrderLength());
 
         order.sender = orderBytes.readBytes32(0);
         order.recipient = orderBytes.readBytes32(32);
@@ -80,7 +83,8 @@ library OrderEncoder {
         order.destinationDomain = orderBytes.readUint32(228);
         order.destinationSettler = orderBytes.readBytes32(232);
         order.fillDeadline = orderBytes.readUint32(264);
-        order.data = orderBytes.readBytes32(268);
+        order.orderType = orderBytes.readUint8(268);
+        order.data = orderBytes.readBytes32(269);
 
         return order;
     }

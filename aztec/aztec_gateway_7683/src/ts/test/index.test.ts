@@ -13,7 +13,7 @@ import { getInitialTestAccountsWallets } from "@aztec/accounts/testing"
 import { spawn } from "child_process"
 import { L1FeeJuicePortalManager } from "@aztec/aztec.js"
 import { createEthereumChain, createL1Clients } from "@aztec/ethereum"
-import { bytesToHex, encodePacked, hexToBytes, padHex, sha256 } from "viem"
+import { encodePacked, hexToBytes, padHex, sha256 } from "viem"
 import { sha256ToField } from "@aztec/foundation/crypto"
 import { computePartialAddress } from "@aztec/stdlib/contract"
 
@@ -23,12 +23,13 @@ import { TokenContract } from "../../artifacts/Token.js"
 const MNEMONIC = "test test test test test test test test test test test junk"
 const PORTAL_ADDRESS = EthAddress.ZERO
 const SETTLE_ORDER_TYPE = "191ea776bd6e0cd56a6d44ba4aea2fec468b4a0b4c1d880d4025929eeb615d0d"
-const ORDER_DATA_TYPE = "0xce57c37dfc5b92296648c64d29544cc620ec6dee71a883e75186bca75bca436c"
+const ORDER_DATA_TYPE = "0xf00c3bf60c73eb97097f1c9835537da014e0b755fe94b25d7ac8401df66716a0"
 const SECRET = padHex(("0x" + Buffer.from("secret", "utf-8").toString("hex")) as `0x${string}`)
 const SECRET_HASH = sha256(SECRET)
 const AZTEC_7683_DOMAIN = 999999
-const PUBLIC_ORDER_DATA = "0xefa1f375d76194fa51a3556a97e641e61685f914d446979da50a551a4333ffd7" // sha256("public")
-const PRIVATE_ORDER_DATA = "0x715dc8493c36579a5b116995100f635e3572fdf8703e708ef1a08d943b36774e" // sha256("private")
+
+const PUBLIC_ORDER = 0
+const PRIVATE_ORDER = 1
 
 const setupSandbox = async () => {
   const { PXE_URL = "http://localhost:8080" } = process.env
@@ -63,7 +64,7 @@ const parseFilledLog = (log: Fr[]) => {
     residualBytes.slice(20, 22) +
     log[9].toString().slice(4) +
     residualBytes.slice(22, 24) +
-    log[10].toString().slice(4, 28)
+    log[10].toString().slice(4, 30)
 
   orderId = "0x" + orderId.slice(4) + residualBytes.slice(4, 6)
   fillerData = "0x" + fillerData.slice(4) + residualBytes.slice(24, 26)
@@ -158,6 +159,7 @@ describe("AztecGateway7683", () => {
         "uint32",
         "bytes32",
         "uint32",
+        "uint8",
         "bytes32",
       ],
       [
@@ -172,7 +174,8 @@ describe("AztecGateway7683", () => {
         1,
         "0xde47c9b27eb8d300dbb5f2c353e632c393262cf06340c4fa7f1b40c4cbd36f90",
         2 ** 32 - 1,
-        PUBLIC_ORDER_DATA,
+        PUBLIC_ORDER,
+        padHex("0x00"),
       ],
     )
 
@@ -234,6 +237,7 @@ describe("AztecGateway7683", () => {
         "uint32",
         "bytes32",
         "uint32",
+        "uint8",
         "bytes32",
       ],
       [
@@ -248,7 +252,8 @@ describe("AztecGateway7683", () => {
         1,
         "0xde47c9b27eb8d300dbb5f2c353e632c393262cf06340c4fa7f1b40c4cbd36f90",
         2 ** 32 - 1,
-        PRIVATE_ORDER_DATA,
+        PRIVATE_ORDER,
+        padHex("0x00"),
       ],
     )
 
@@ -293,6 +298,7 @@ describe("AztecGateway7683", () => {
         "uint32",
         "bytes32",
         "uint32",
+        "uint8",
         "bytes32",
       ],
       [
@@ -307,12 +313,13 @@ describe("AztecGateway7683", () => {
         AZTEC_7683_DOMAIN,
         "0xde47c9b27eb8d300dbb5f2c353e632c393262cf06340c4fa7f1b40c4cbd36f90",
         2 ** 32 - 1,
-        PUBLIC_ORDER_DATA,
+        PUBLIC_ORDER,
+        padHex("0x00"),
       ],
     )
 
     const orderId = sha256(originData)
-    const fillerData = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] // keep it 0 for now
+    const fillerData = padHex("0x00") // keep it 0 for now
     await (
       await filler.setPublicAuthWit(
         {
@@ -330,7 +337,7 @@ describe("AztecGateway7683", () => {
     const fromBlock = await pxe.getBlockNumber()
     await gateway
       .withWallet(filler)
-      .methods.fill(Array.from(hexToBytes(orderId)), Array.from(hexToBytes(originData)), fillerData)
+      .methods.fill(Array.from(hexToBytes(orderId)), Array.from(hexToBytes(originData)), Array.from(hexToBytes(fillerData)))
       .send()
       .wait()
 
@@ -342,7 +349,7 @@ describe("AztecGateway7683", () => {
     const parsedLog = parseFilledLog(logs[0].log.log)
     expect(orderId).toBe(parsedLog.orderId)
     expect(originData).toBe(parsedLog.originData)
-    expect("0x" + Buffer.from(fillerData).toString("hex")).toBe(parsedLog.fillerData)
+    expect(fillerData).toBe(parsedLog.fillerData)
 
     const content = sha256ToField([
       Buffer.from(SETTLE_ORDER_TYPE, "hex"),
@@ -407,6 +414,7 @@ describe("AztecGateway7683", () => {
         "uint32",
         "bytes32",
         "uint32",
+        "uint8",
         "bytes32",
       ],
       [
@@ -421,7 +429,8 @@ describe("AztecGateway7683", () => {
         AZTEC_7683_DOMAIN,
         "0xde47c9b27eb8d300dbb5f2c353e632c393262cf06340c4fa7f1b40c4cbd36f90",
         2 ** 32 - 1,
-        PRIVATE_ORDER_DATA,
+        PRIVATE_ORDER,
+        padHex("0x00"),
       ],
     )
 

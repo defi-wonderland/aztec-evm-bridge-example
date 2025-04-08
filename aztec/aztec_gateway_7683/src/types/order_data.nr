@@ -1,11 +1,14 @@
 use crate::utils::u8_4_to_u32;
 use dep::aztec::protocol_types::traits::{Deserialize, Serialize};
 
-pub global ORDER_DATA_LENGTH: u32 = 300;
+pub global ORDER_DATA_LENGTH: u32 = 301;
 pub global ORDER_DATA_TYPE: [u8; 32] = [
-    206, 87, 195, 125, 252, 91, 146, 41, 102, 72, 198, 77, 41, 84, 76, 198, 32, 236, 109, 238, 113,
-    168, 131, 231, 81, 134, 188, 167, 91, 202, 67, 108,
+    240, 12, 59, 246, 12, 115, 235, 151, 9, 127, 28, 152, 53, 83, 125, 160, 20, 224, 183, 85, 254,
+    148, 178, 93, 122, 200, 64, 29, 246, 103, 22, 160,
 ];
+
+pub global PUBLIC_ORDER: u8 = 0;
+pub global PRIVATE_ORDER: u8 = 1;
 
 #[derive(Deserialize, Eq, Serialize)]
 pub struct OrderData {
@@ -20,6 +23,7 @@ pub struct OrderData {
     pub destination_domain: u32,
     pub destination_settler: [u8; 32],
     pub fill_deadline: u32,
+    pub order_type: u8,
     pub data: [u8; 32],
 }
 
@@ -36,7 +40,8 @@ impl OrderData {
         let destination_domain = u8_4_to_u32(u8_order_data_length_to_u8_4(bytes, 228));
         let destination_settler = u8_order_data_length_to_u8_32(bytes, 232);
         let fill_deadline = u8_4_to_u32(u8_order_data_length_to_u8_4(bytes, 264));
-        let data = u8_order_data_length_to_u8_32(bytes, 268);
+        let order_type = u8_order_data_length_to_u8(bytes, 268);
+        let data = u8_order_data_length_to_u8_32(bytes, 269);
 
         OrderData {
             sender,
@@ -50,6 +55,7 @@ impl OrderData {
             destination_domain,
             destination_settler,
             fill_deadline,
+            order_type,
             data,
         }
     }
@@ -69,4 +75,8 @@ fn u8_order_data_length_to_u8_4(bytes: [u8; ORDER_DATA_LENGTH], start: u32) -> [
         result[i] = bytes[start + i];
     }
     result
+}
+
+fn u8_order_data_length_to_u8(bytes: [u8; ORDER_DATA_LENGTH], start: u32) -> u8 {
+    bytes[start]
 }
