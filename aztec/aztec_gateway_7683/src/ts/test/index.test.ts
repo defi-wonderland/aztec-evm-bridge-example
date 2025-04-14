@@ -423,7 +423,7 @@ describe("AztecGateway7683", () => {
         AZTEC_7683_DOMAIN,
         DESTINATION_SETTLER,
         FILL_DEADLINE,
-        PUBLIC_ORDER,
+        PRIVATE_ORDER,
         DATA,
       ],
     )

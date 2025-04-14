@@ -187,7 +187,7 @@ pub contract AztecGateway7683 {
         );
 
         let order_data = OrderData::decode(origin_data_bytes);
-        // TODO: assert that order_data.data specifies that this order is a public one
+        assert(order_data.order_type == PUBLIC_ORDER, "Not a public order");
         assert(order_id_bytes == sha256::digest(origin_data_bytes), "Invalid order id");
         assert(context.timestamp() as u32 <= order_data.fill_deadline, "Order fill expired");
         assert(
@@ -235,7 +235,7 @@ pub contract AztecGateway7683 {
         );
 
         let order_data = OrderData::decode(origin_data_bytes);
-        // TODO: assert that order_data.data specifies that this order is a private one
+        assert(order_data.order_type == PRIVATE_ORDER, "Not a private order");
         assert(order_id_bytes == sha256::digest(origin_data_bytes), "Invalid order id");
         assert(context.timestamp() as u32 <= order_data.fill_deadline, "Order fill expired");
         assert(order_data.destination_domain == LOCAL_DESTINATION_DOMAIN, "Invalid order domain");
