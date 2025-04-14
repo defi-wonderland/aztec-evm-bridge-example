@@ -89,7 +89,7 @@ pub contract AztecGateway7683 {
                     context.msg_sender(),
                     context.this_address(),
                     u8_32_to_u128(min_received.amount),
-                    0,
+                    nonce,
                 )
                 .call(&mut context);
         }
@@ -124,7 +124,7 @@ pub contract AztecGateway7683 {
                     context.msg_sender(),
                     context.this_address(),
                     u8_32_to_u128(min_received.amount),
-                    0,
+                    nonce,
                 )
                 .call(&mut context);
         }

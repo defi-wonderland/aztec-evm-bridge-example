@@ -124,7 +124,7 @@ describe("AztecGateway7683", () => {
     const { token, gateway } = await setup({ admin, pxe, receiver: user })
 
     const amountIn = 100n
-    const nonce = new Fr(0)
+    const nonce = Fr.random()
     await (
       await user.setPublicAuthWit(
         {
@@ -162,7 +162,7 @@ describe("AztecGateway7683", () => {
         TOKEN_OUT,
         amountIn,
         AMOUNT_OUT_ZERO,
-        0n, // nonce
+        nonce.toBigInt(),
         AZTEC_7683_DOMAIN,
         MAINNET_CHAIN_ID,
         DESTINATION_SETTLER,
@@ -212,7 +212,7 @@ describe("AztecGateway7683", () => {
     const { token, gateway } = await setup({ admin, pxe, receiver: user })
 
     const amountIn = 100n
-    const nonce = new Fr(0)
+    const nonce = Fr.random()
     const witness = await user.createAuthWit({
       caller: gateway.address,
       action: token.withWallet(user).methods.transfer_in_private(user.getAddress(), gateway.address, amountIn, nonce),
@@ -242,7 +242,7 @@ describe("AztecGateway7683", () => {
         TOKEN_OUT,
         amountIn,
         AMOUNT_OUT_ZERO,
-        0n, // nonce
+        nonce.toBigInt(),
         AZTEC_7683_DOMAIN,
         MAINNET_CHAIN_ID,
         DESTINATION_SETTLER,
@@ -292,7 +292,7 @@ describe("AztecGateway7683", () => {
     const { token, gateway } = await setup({ admin, pxe, receiver: filler })
 
     const amountOut = 100n
-    const nonce = new Fr(0)
+    const nonce = Fr.random()
     const originData = encodePacked(
       [
         "bytes32",
@@ -316,7 +316,7 @@ describe("AztecGateway7683", () => {
         token.address.toString(),
         AMOUNT_IN_ZERO,
         amountOut,
-        0n, // nonce
+        nonce.toBigInt(),
         MAINNET_CHAIN_ID,
         AZTEC_7683_DOMAIN,
         DESTINATION_SETTLER,
@@ -394,6 +394,7 @@ describe("AztecGateway7683", () => {
     const { token, gateway } = await setup({ admin, pxe, receiver: filler })
 
     const amountOut = 100n
+    const nonce = Fr.random()
     const originData = encodePacked(
       [
         "bytes32",
@@ -417,7 +418,7 @@ describe("AztecGateway7683", () => {
         token.address.toString(),
         AMOUNT_IN_ZERO,
         amountOut,
-        0n, // nonce
+        nonce.toBigInt(),
         MAINNET_CHAIN_ID,
         AZTEC_7683_DOMAIN,
         DESTINATION_SETTLER,
