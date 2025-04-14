@@ -23,7 +23,7 @@ pub contract AztecGateway7683 {
     use crate::{
         config::Config,
         types::{
-            events::Filled,
+            events::{Filled, Open},
             helpers::InternalRCOParams,
             onchain_cross_chain_order::OnchainCrossChainOrder,
             order_data::{
@@ -31,15 +31,16 @@ pub contract AztecGateway7683 {
             },
             resolved_cross_chain_order::{
                 FILL_INSTRUCTIONS_MAX_INSTRUCTIONS, FillInstruction, MAX_SPENT_MAX_OUTPUTS,
-                MIN_RECEIVED_MAX_OUTPUTS, Output, ResolvedCrossChainOrder,
+                MIN_RECEIVED_MAX_OUTPUTS, Output, RESOLVED_CROSS_CHAIN_LENGTH,
+                ResolvedCrossChainOrder,
             },
         },
-        utils::{u8_32_to_aztec_address, u8_32_to_u128},
+        utils::{u32_to_u8_4, u8_32_to_aztec_address, u8_32_to_u128},
     };
     use dep::aztec::{
         macros::{functions::{initializer, internal, private, public, view}, storage::storage},
         prelude::{AztecAddress, EthAddress, Map, PublicImmutable, PublicMutable},
-        protocol_types::{hash::sha256_to_field, traits::Packable},
+        protocol_types::{hash::sha256_to_field, traits::{Packable, Serialize}},
     };
     use token::Token;
 
@@ -93,7 +94,9 @@ pub contract AztecGateway7683 {
                 .call(&mut context);
         }
 
-        // TODO emit event Open(order_id, resolved_order);
+        let event = Open::new(data.order_id_bytes, resolved_order.serialize());
+        context.emit_public_log(event.open1.pack());
+        context.emit_public_log(event.open2.pack());
     }
 
     #[private]
@@ -126,7 +129,9 @@ pub contract AztecGateway7683 {
                 .call(&mut context);
         }
 
-        // TODO emit event Open(order_id, resolved_order);
+        AztecGateway7683::at(context.this_address())
+            ._emit_open(data.order_id_bytes, resolved_order.serialize())
+            .enqueue(&mut context);
     }
 
     #[private]
@@ -260,18 +265,6 @@ pub contract AztecGateway7683 {
 
     #[public]
     #[view]
-    fn get_config() -> Config {
-        storage.config.read()
-    }
-
-    #[private]
-    #[view]
-    fn get_config_private() -> Config {
-        storage.config.read()
-    }
-
-    #[public]
-    #[view]
     fn get_order_status(order_id_bytes: [u8; 32]) -> u32 {
         storage.order_status.at(Field::from_be_bytes(order_id_bytes)).read()
     }
@@ -333,6 +326,17 @@ pub contract AztecGateway7683 {
 
     #[public]
     #[internal]
+    fn _emit_open(
+        order_id_bytes: [u8; 32],
+        resolved_order_bytes: [Field; RESOLVED_CROSS_CHAIN_LENGTH],
+    ) {
+        let event = Open::new(order_id_bytes, resolved_order_bytes);
+        context.emit_public_log(event.open1.pack());
+        context.emit_public_log(event.open2.pack());
+    }
+
+    #[public]
+    #[internal]
     fn _trigger_settlement(order_id: Field, order_id_bytes: [u8; 32], filler_data: [u8; 32]) {
         storage.filled_orders_block_numbers.at(order_id).write(context.block_number());
 
@@ -361,12 +365,13 @@ pub contract AztecGateway7683 {
 
         let order_id_bytes = sha256::digest(order.order_data);
         let order_id = Field::from_be_bytes(order_id_bytes);
+        let destination_domain_bytes = u32_to_u8_4(order_data.destination_domain);
 
         let min_received_output = Output {
             token: order_data.input_token,
             recipient: [0; 32],
             amount: order_data.amount_in,
-            chain_id: order_data.origin_domain,
+            chain_id: u32_to_u8_4(order_data.origin_domain),
         };
         let min_received: [Output; MIN_RECEIVED_MAX_OUTPUTS] =
             [min_received_output; MIN_RECEIVED_MAX_OUTPUTS];
@@ -375,12 +380,12 @@ pub contract AztecGateway7683 {
             token: order_data.output_token,
             recipient: order_data.recipient,
             amount: order_data.amount_out,
-            chain_id: order_data.destination_domain,
+            chain_id: destination_domain_bytes,
         };
         let max_spent: [Output; MAX_SPENT_MAX_OUTPUTS] = [max_spent_output; MAX_SPENT_MAX_OUTPUTS];
 
         let fill_instruction = FillInstruction {
-            destination_chain_id: order_data.destination_domain,
+            destination_chain_id: destination_domain_bytes,
             destination_settler: order_data.destination_settler,
             origin_data: order.order_data,
         };
@@ -388,17 +393,22 @@ pub contract AztecGateway7683 {
             [fill_instruction; FILL_INSTRUCTIONS_MAX_INSTRUCTIONS];
 
         let resolved_order = ResolvedCrossChainOrder {
-            user: sender,
-            origin_chain_id: LOCAL_DESTINATION_DOMAIN,
-            open_dealine: timestamp as u32,
-            fill_deadline: order.fill_deadline,
+            user: order_data.sender,
+            origin_chain_id: u32_to_u8_4(LOCAL_DESTINATION_DOMAIN),
+            open_deadline: u32_to_u8_4(timestamp as u32),
+            fill_deadline: u32_to_u8_4(order.fill_deadline),
             order_id: order_id_bytes,
             min_received,
             max_spent,
             fill_instructions,
         };
 
-        InternalRCOParams { order_id, resolved_cross_chain_order: resolved_order, order_data }
+        InternalRCOParams {
+            order_id_bytes,
+            order_id,
+            resolved_cross_chain_order: resolved_order,
+            order_data,
+        }
     }
 
     #[contract_library_method]

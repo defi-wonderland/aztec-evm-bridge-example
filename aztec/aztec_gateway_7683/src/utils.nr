@@ -17,3 +17,7 @@ pub(crate) fn u8_4_to_u32(bytes: [u8; 4]) -> u32 {
 pub(crate) fn u8_32_to_aztec_address(bytes: [u8; 32]) -> AztecAddress {
     AztecAddress::from_field(Field::from_be_bytes(bytes))
 }
+
+pub(crate) fn u32_to_u8_4(x: u32) -> [u8; 4] {
+    [((x >> 24) & 0xFF) as u8, ((x >> 16) & 0xFF) as u8, ((x >> 8) & 0xFF) as u8, (x & 0xFF) as u8]
+}
