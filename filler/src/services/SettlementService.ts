@@ -119,7 +119,7 @@ class SettlementService extends BaseService {
               status: order.status,
             })
           } else if (order.resolvedOrder.maxSpent[0].chainId === AZTEC_7683_CHAIN_ID) {
-            await this.forwardOrderSettlementToL2({
+            await this.forwardOrderSettlementToEvmL2({
               orderId: order.orderId,
               resolvedOrder: order.resolvedOrder,
               fillTxHash: order.fillTxHash,
@@ -147,7 +147,7 @@ class SettlementService extends BaseService {
     }
   }
 
-  async forwardOrderSettlementToL2(order: Order) {
+  async forwardOrderSettlementToEvmL2(order: Order) {
     const release = await this.forwardOrderSettlementMutex.acquire()
     try {
       this.logger.info(`forwarding settlement to L2 for order ${order.orderId} ...`)
@@ -182,22 +182,21 @@ class SettlementService extends BaseService {
 
       const client = this.evmMultiClient.getClientByChain(this.l1Chain)
       const forwardSettleTxHash = await client.writeContract({
-        address: this.forwarderAddress,
         abi: forwarderAbi,
+        account: client.account.address,
+        address: this.forwarderAddress,
         args: [
           [
-            [
-              this.aztecGatewayAddress,
-              AZTEC_VERSION, // version
-            ],
+            [this.aztecGatewayAddress, AZTEC_VERSION],
             [this.forwarderAddress, FORWARDER_CHAIN_ID],
             messageHash.toString(),
           ],
           bytesToHex(Buffer.concat([...message])),
           filledOrderBlockNumber,
           l2ToL1MessageIndex,
-          [padHex("0x00")], // TODO
+          [padHex("0x00")],
         ],
+        chain: this.l1Chain,
         functionName: "forwardSettleToL2",
       })
       this.logger.info(`waiting for transaction confirmation of ${forwardSettleTxHash} ...`)
@@ -234,13 +233,23 @@ class SettlementService extends BaseService {
 
       for (const order of orders) {
         try {
-          await this.settleOrder({
-            orderId: order.orderId,
-            resolvedOrder: order.resolvedOrder,
-            fillTxHash: order.fillTxHash,
-            fillerData: order.fillerData,
-            status: order.status,
-          })
+          if (order.resolvedOrder.maxSpent[0].chainId === this.l2EvmChain.id) {
+            await this.settleOrderOnEvmAztec({
+              orderId: order.orderId,
+              resolvedOrder: order.resolvedOrder,
+              fillTxHash: order.fillTxHash,
+              fillerData: order.fillerData,
+              status: order.status,
+            })
+          } else if (order.resolvedOrder.maxSpent[0].chainId === AZTEC_7683_CHAIN_ID) {
+            await this.settleOrderOnEvmL2({
+              orderId: order.orderId,
+              resolvedOrder: order.resolvedOrder,
+              fillTxHash: order.fillTxHash,
+              fillerData: order.fillerData,
+              status: order.status,
+            })
+          }
         } catch (err) {}
       }
     } catch (err) {
@@ -248,7 +257,16 @@ class SettlementService extends BaseService {
     }
   }
 
-  async settleOrder(order: Order) {
+  async settleOrderOnEvmAztec(order: Order) {
+    try {
+    } catch (err) {
+      this.logger.error(err)
+      throw err
+    } finally {
+    }
+  }
+
+  async settleOrderOnEvmL2(order: Order) {
     const release = await this.settleOrderMutex.acquire()
     try {
       this.logger.info(`settling order ${order.orderId} ...`)
@@ -303,7 +321,9 @@ class SettlementService extends BaseService {
       }
 
       const settleTxHash = await l2EvmClient.writeContract({
+        account: l2EvmClient.account.address,
         address: this.l2EvmGatewayAddress,
+        chain: this.l2EvmChain,
         functionName: "settle",
         args: [bytesToHex(Buffer.concat([...message])), stateRootParameters, accountProofParameters],
         abi: l2Gateway7683Abi,

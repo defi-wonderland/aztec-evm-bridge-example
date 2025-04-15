@@ -2,6 +2,7 @@ import { erc20Abi, padHex, sliceHex } from "viem"
 import { AztecAddress } from "@aztec/aztec.js"
 import { TokenContract, TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
 import { Mutex } from "async-mutex"
+import { waitForTransactionReceipt } from "viem/actions"
 
 import { registerContract } from "../utils/aztec.js"
 import { AztecGateway7683Contract } from "../artifacts/AztecGateway7683/AztecGateway7683.js"
@@ -20,7 +21,6 @@ import type { Chain, Log } from "viem"
 import type { Wallet } from "@aztec/aztec.js"
 import type { BaseServiceOpts } from "./BaseService"
 import type MultiClient from "../MultiClient.js"
-import { waitForTransactionReceipt } from "viem/actions"
 
 export type OrderServiceOpts = BaseServiceOpts & {
   aztecWallet: Wallet
@@ -158,19 +158,23 @@ class OrderService extends BaseService {
       this.logger.info(`approving l2EvmGateway to spend ${maxSpentAmount} tokens ...`)
       let txHash = await l2EvmClient.writeContract({
         abi: erc20Abi,
+        account: l2EvmClient.account.address,
         address: maxSpentToken,
-        functionName: "approve",
         args: [this.l2EvmGatewayAddress, maxSpentAmount],
+        chain: this.l2EvmChain,
+        functionName: "approve",
       })
       await waitForTransactionReceipt(l2EvmClient, { hash: txHash })
       this.logger.info(`tokens approved. ${this.l2EvmChain.name}:${txHash}. filling the order ...`)
 
       const fillerData = this.aztecWallet.getAddress().toString()
       txHash = await l2EvmClient.writeContract({
-        address: this.l2EvmGatewayAddress,
         abi: l2Gateway7683Abi,
-        functionName: "fill",
+        account: l2EvmClient.account.address,
+        address: this.l2EvmGatewayAddress,
         args: [orderId, originData, fillerData],
+        chain: this.l2EvmChain,
+        functionName: "fill",
       })
       await waitForTransactionReceipt(l2EvmClient, { hash: txHash })
 
@@ -242,22 +246,20 @@ class OrderService extends BaseService {
       ])
 
       this.logger.info(`setting public auth with to fill the order ${orderId} ...`)
-      await (
-        await this.aztecWallet.setPublicAuthWit(
-          {
-            caller: AztecAddress.fromString(this.aztecGatewayAddress),
-            action: token.methods.transfer_in_public(
-              this.aztecWallet.getAddress(),
-              AztecAddress.fromString(this.aztecGatewayAddress),
-              maxSpentAmount,
-              0,
-            ),
-          },
-          true,
-        )
+      // @ts-ignore
+      const res = await this.aztecWallet.setPublicAuthWit(
+        {
+          caller: AztecAddress.fromString(this.aztecGatewayAddress),
+          action: token.methods.transfer_in_public(
+            this.aztecWallet.getAddress(),
+            AztecAddress.fromString(this.aztecGatewayAddress),
+            maxSpentAmount,
+            0,
+          ),
+        },
+        true,
       )
-        .send()
-        .wait()
+      await res.send().wait()
 
       const orderType = `0x${originData.slice(538, 540)}`
       const orderStatus = orderType === PRIVATE_ORDER_HEX ? ORDER_STATUS_INITIATED_PRIVATELY : ORDER_STATUS_FILLED
