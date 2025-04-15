@@ -14,6 +14,7 @@ contract Forwarder is IForwarder {
     uint256 private constant L2_GATEWAY_FILLED_ORDERS_SLOT = 2;
     uint256 private constant AZTEC_VERSION = 1;
     bytes32 private constant SETTLE_ORDER_TYPE = sha256(abi.encodePacked("SETTLE_ORDER_TYPE"));
+    bytes32 public constant SECRET_HASH = sha256(abi.encodePacked("SECRET"));
 
     address public immutable L2_GATEWAY;
     address public immutable AZTEC_INBOX;
@@ -44,16 +45,23 @@ contract Forwarder is IForwarder {
         require(bytes32(accountProofParams.storageKey) == storageKey, InvalidStorageKey());
 
         (Hash stateRoot,) = IAnchorStateRegistry(ANCHOR_STATE_REGISTRY).getAnchorRoot();
-        require(StateValidator.validateAccountStorage(L2_GATEWAY, stateRoot.raw(), accountProofParams), InvalidAccountStorage());
+        require(
+            StateValidator.validateAccountStorage(L2_GATEWAY, stateRoot.raw(), accountProofParams),
+            InvalidAccountStorage()
+        );
 
         Base7683.FilledOrder memory order = abi.decode(accountProofParams.storageValue, (Base7683.FilledOrder));
 
         // NOTE: The filler data is currently only 32 bytes and contains the address of the filler on Aztec, where the funds will be received.
+        // It is also possible to include the hash of the filler address within `fillerData` and privately settle on Aztec.
+        // However, an attacker could front-run the settlement using a secret, thereby preventing the filler from settling,
+        // as the filler would not know the secret and thus would be unable to receive the tokens.
+        // For this reason, and for simplicity, we hardcode a fixed value as the secret hash to avoid this problem.
         bytes memory message = abi.encodePacked(SETTLE_ORDER_TYPE, orderId, bytes32(order.fillerData));
         bytes32 messageHash = sha256(message);
         IInbox(AZTEC_INBOX).sendL2Message(
-            DataStructures.L2Actor({actor: AZTEC_GATEWAY, version: AZTEC_VERSION}), messageHash, bytes32(0)
-        ); // TODO: understand what to use as _secretHash
+            DataStructures.L2Actor({actor: AZTEC_GATEWAY, version: AZTEC_VERSION}), messageHash, SECRET_HASH
+        );
         emit SettleForwardedToAztec(message);
     }
 
