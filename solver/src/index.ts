@@ -13,6 +13,7 @@ import SettlementService from "./services/SettlementService.js"
 import MultiClient from "./MultiClient.js"
 
 import type { Log } from "viem"
+import AztecWatcher from "./watchers/AztecWatcher.js"
 
 const AZTEC_GATEWAY_ADDRESS = process.env.AZTEC_GATEWAY_ADDRESS as `0x${string}`
 const L2_EVM_GATEWAY_ADDRESS = process.env.L2_EVM_GATEWAY_ADDRESS as `0x${string}`
@@ -21,6 +22,8 @@ const FORWARDER_RPC_URL = process.env.FORWARDER_RPC_URL as string
 const PK = process.env.PK as `0x${string}`
 const EVM_L2_RPC_URL = process.env.EVM_L2_RPC_URL as string
 const BEACON_API_URL = process.env.BEACON_API_URL as string
+const EVM_WATCH_INTERVAL_TIME_MS = Number(process.env.EVM_WATCH_INTERVAL_TIME_MS as string)
+const AZTEC_WATCH_INTERVAL_TIME_MS = Number(process.env.AZTEC_WATCH_INTERVAL_TIME_MS as string)
 
 const main = async () => {
   const mongoClient = new MongoClient(process.env.MONGO_DB_URI as string)
@@ -57,6 +60,7 @@ const main = async () => {
     evmMultiClient,
     logger,
     l2EvmChain,
+    l2EvmGatewayAddress: L2_EVM_GATEWAY_ADDRESS,
   })
 
   new SettlementService({
@@ -74,21 +78,36 @@ const main = async () => {
     pxe: await getPxe(),
   })
 
-  const watcher = new EvmWatcher({
-    service: `EvmWatcher:${l2EvmChain.name}`,
+  const evmWatcher = new EvmWatcher({
+    service: `${l2EvmChain.name.replace(/\s+/g, "")}Watcher`,
     logger,
     client: evmMultiClient.getClientByChain(l2EvmChain),
     contractAddress: L2_EVM_GATEWAY_ADDRESS,
     abi: l2Gateway7683Abi,
     eventName: "Open",
-    watchIntervalTimeMs: Number(process.env.WATCH_INTERVAL_TIME_MS as string),
+    watchIntervalTimeMs: EVM_WATCH_INTERVAL_TIME_MS,
     onLogs: async (logs: Log[]) => {
       for (const log of logs) {
         await orderService.fillEvmOrderFromLog(log)
       }
     },
   })
-  watcher.start()
+  const aztecWatcher = new AztecWatcher({
+    service: "AztecWatcher",
+    logger,
+    pxe: await getPxe(),
+    contractAddress: AZTEC_GATEWAY_ADDRESS,
+    eventName: "Open",
+    watchIntervalTimeMs: AZTEC_WATCH_INTERVAL_TIME_MS,
+    onLogs: async (logs) => {
+      for (const log of logs) {
+        await orderService.fillAztecOrderFromLog(log)
+      }
+    },
+  })
+
+  evmWatcher.start()
+  aztecWatcher.start()
 }
 
 main()

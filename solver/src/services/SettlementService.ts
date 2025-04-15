@@ -9,6 +9,7 @@ import { Mutex } from "async-mutex"
 
 import BaseService from "./BaseService"
 import {
+  AZTEC_7683_CHAIN_ID,
   AZTEC_VERSION,
   FORWARDER_CHAIN_ID,
   FORWARDER_SETTLE_ORDER_SLOTS,
@@ -109,13 +110,23 @@ class SettlementService extends BaseService {
 
       for (const order of orders) {
         try {
-          await this.forwardOrderSettlment({
-            orderId: order.orderId,
-            resolvedOrder: order.resolvedOrder,
-            fillTxHash: order.fillTxHash,
-            fillerData: order.fillerData,
-            status: order.status,
-          })
+          if (order.resolvedOrder.maxSpent[0].chainId === this.l2EvmChain.id) {
+            await this.forwardOrderSettlementToAztec({
+              orderId: order.orderId,
+              resolvedOrder: order.resolvedOrder,
+              fillTxHash: order.fillTxHash,
+              fillerData: order.fillerData,
+              status: order.status,
+            })
+          } else if (order.resolvedOrder.maxSpent[0].chainId === AZTEC_7683_CHAIN_ID) {
+            await this.forwardOrderSettlementToL2({
+              orderId: order.orderId,
+              resolvedOrder: order.resolvedOrder,
+              fillTxHash: order.fillTxHash,
+              fillerData: order.fillerData,
+              status: order.status,
+            })
+          }
         } catch (err) {}
       }
     } catch (err) {
@@ -123,12 +134,23 @@ class SettlementService extends BaseService {
     }
   }
 
-  async forwardOrderSettlment(order: Order) {
+  async forwardOrderSettlementToAztec(order: Order) {
     const release = await this.forwardOrderSettlementMutex.acquire()
     try {
-      // TODO: distinguish the chains
+      this.logger.info(`forwarding settlement to Aztec for order ${order.orderId} ...`)
+      // TODO
+    } catch (err) {
+      this.logger.error(err)
+      throw err
+    } finally {
+      release()
+    }
+  }
 
-      this.logger.info(`forwarding settlement for order ${order.orderId} ...`)
+  async forwardOrderSettlementToL2(order: Order) {
+    const release = await this.forwardOrderSettlementMutex.acquire()
+    try {
+      this.logger.info(`forwarding settlement to L2 for order ${order.orderId} ...`)
 
       const message = [
         Buffer.from(SETTLE_ORDER_TYPE.slice(2), "hex"),

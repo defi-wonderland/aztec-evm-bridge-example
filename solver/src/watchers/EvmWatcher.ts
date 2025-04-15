@@ -41,7 +41,7 @@ class EvmWatcher {
       setInterval(() => {
         this.watch()
       }, this.watchIntervalTimeMs)
-    } catch (_err) {}
+    } catch (error) {}
   }
 
   private async watch() {
@@ -69,15 +69,14 @@ class EvmWatcher {
 
       if (logs.length) {
         this.logger.info(
-          `Detected ${logs.length} new ${this.eventName} events on ${this.client.chain.name}. Processing them ...`,
+          `Detected ${logs.length} new ${this.eventName} events on ${this.client.chain!.name}. Processing them ...`,
         )
         await this.onLogs(logs)
-        this.logger.info("Events succesfully processed.")
       }
 
       this.lastBlock = currentBlock
-    } catch (_err) {
-      this.logger.error(`${_err}`)
+    } catch (error) {
+      this.logger.error(error)
     }
   }
 }

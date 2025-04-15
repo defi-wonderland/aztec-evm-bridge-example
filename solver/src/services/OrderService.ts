@@ -1,10 +1,11 @@
-import { hexToBytes, padHex } from "viem"
+import { erc20Abi, padHex, sliceHex } from "viem"
 import { AztecAddress } from "@aztec/aztec.js"
 import { TokenContract, TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
 import { Mutex } from "async-mutex"
 
 import { registerContract } from "../utils/aztec.js"
 import { AztecGateway7683Contract } from "../artifacts/AztecGateway7683/AztecGateway7683.js"
+import l2Gateway7683Abi from "../abis/l2Gateway7683.js"
 import {
   AZTEC_7683_CHAIN_ID,
   ORDER_FILLED,
@@ -15,16 +16,18 @@ import {
 import BaseService from "./BaseService"
 import { hexToUintArray } from "../utils/bytes.js"
 
-import type { Chain, Log, PublicClient, WalletClient } from "viem"
+import type { Chain, Log } from "viem"
 import type { Wallet } from "@aztec/aztec.js"
 import type { BaseServiceOpts } from "./BaseService"
 import type MultiClient from "../MultiClient.js"
+import { waitForTransactionReceipt } from "viem/actions"
 
 export type OrderServiceOpts = BaseServiceOpts & {
   aztecWallet: Wallet
   aztecGatewayAddress: `0x${string}`
   evmMultiClient: MultiClient
   l2EvmChain: Chain
+  l2EvmGatewayAddress: `0x${string}`
 }
 
 class OrderService extends BaseService {
@@ -32,7 +35,9 @@ class OrderService extends BaseService {
   aztecGatewayAddress: `0x${string}`
   evmMultiClient: MultiClient
   l2EvmChain: Chain
+  l2EvmGatewayAddress: `0x${string}`
   fillEvmOrderFromLogMutex: Mutex
+  fillAztecOrderFromLogMutex: Mutex
 
   constructor(opts: OrderServiceOpts) {
     super(opts)
@@ -40,9 +45,11 @@ class OrderService extends BaseService {
     this.aztecWallet = opts.aztecWallet
     this.evmMultiClient = opts.evmMultiClient
     this.aztecGatewayAddress = opts.aztecGatewayAddress
+    this.l2EvmGatewayAddress = opts.l2EvmGatewayAddress
     this.l2EvmChain = opts.l2EvmChain
 
     this.fillEvmOrderFromLogMutex = new Mutex()
+    this.fillAztecOrderFromLogMutex = new Mutex()
 
     this.monitorInitiadedPrivatelyOrders()
     setInterval(() => {
@@ -50,6 +57,13 @@ class OrderService extends BaseService {
     }, 30000)
   }
 
+  /**
+   *
+   * @remarks
+   * Currently, privately initiated orders are created only on the Aztec network.
+   *
+   * @returns {Promise<void>} A promise that resolves when monitoring is complete.
+   */
   async monitorInitiadedPrivatelyOrders(): Promise<void> {
     try {
       this.logger.info("looking for initiated privately orders ...")
@@ -93,6 +107,91 @@ class OrderService extends BaseService {
     }
   }
 
+  async fillAztecOrderFromLog(log: any): Promise<void> {
+    const release = await this.fillAztecOrderFromLogMutex.acquire()
+    try {
+      const {
+        orderId,
+        resolvedOrder: { fillInstructions, maxSpent, minReceived },
+      } = log as any
+
+      this.logger.info(`new order detected on Aztec. order id: ${orderId}. processing it ...`)
+      if (await this.db.collection("orders").findOne({ orderId })) {
+        this.logger.info(`order ${orderId} already stored in the db. skipping it ...`)
+        return
+      }
+
+      const l2EvmClient = this.evmMultiClient.getClientByChain(this.l2EvmChain)
+      const onChainStatus = await l2EvmClient.readContract({
+        abi: l2Gateway7683Abi,
+        address: this.l2EvmGatewayAddress,
+        functionName: "orderStatus",
+        args: [orderId],
+      })
+      if (onChainStatus !== padHex("0x0")) {
+        this.logger.info(`order ${orderId} already processed by someone else. skipping it ...`)
+        return
+      }
+
+      const originData = fillInstructions[0].originData
+      const minReceivedAmount = minReceived[0].amount
+      const minReceivedToken = minReceived[0].token
+      // const minReceivedRecipient = minReceived[0].recipient
+      // const minReceivedChainId = minReceived[0].chainId
+      const maxSpentAmount = maxSpent[0].amount
+      const maxSpentToken = sliceHex(maxSpent[0].token, 12)
+      const maxSpentRecipient = maxSpent[0].recipient
+      const maxSpentChainId = maxSpent[0].chainId
+
+      // TODO: check if minReceivedToken is supported
+      if (maxSpentChainId !== this.l2EvmChain.id) throw new Error("Invalid chain id")
+
+      // TODO: calculate the best price for this swap
+      this.logger.info(
+        `swapping from Aztec to ${this.l2EvmChain.name} ${minReceivedAmount} ${minReceivedToken} for ${maxSpentAmount} ${maxSpentToken} to ${maxSpentRecipient}...`,
+      )
+
+      // On the EVM chain, there's no distinction since the sender–receiver link is private on Aztec.
+      // No claim is required on the EVM side.
+      const orderStatus = ORDER_STATUS_FILLED
+
+      this.logger.info(`approving l2EvmGateway to spend ${maxSpentAmount} tokens ...`)
+      let txHash = await l2EvmClient.writeContract({
+        abi: erc20Abi,
+        address: maxSpentToken,
+        functionName: "approve",
+        args: [this.l2EvmGatewayAddress, maxSpentAmount],
+      })
+      await waitForTransactionReceipt(l2EvmClient, { hash: txHash })
+      this.logger.info(`tokens approved. ${this.l2EvmChain.name}:${txHash}. filling the order ...`)
+
+      const fillerData = this.aztecWallet.getAddress().toString()
+      txHash = await l2EvmClient.writeContract({
+        address: this.l2EvmGatewayAddress,
+        abi: l2Gateway7683Abi,
+        functionName: "fill",
+        args: [orderId, originData, fillerData],
+      })
+      await waitForTransactionReceipt(l2EvmClient, { hash: txHash })
+
+      this.logger.info(
+        `order ${orderId} filled succesfully. tx hash: ${this.l2EvmChain.name}:${txHash}. storing it ...`,
+      )
+      await this.addOrder({
+        orderId,
+        fillerData,
+        fillTxHash: txHash,
+        log,
+        orderStatus,
+      })
+    } catch (err) {
+      this.logger.error(err)
+      throw err
+    } finally {
+      release()
+    }
+  }
+
   async fillEvmOrderFromLog(log: Log): Promise<void> {
     const release = await this.fillEvmOrderFromLogMutex.acquire()
     try {
@@ -103,13 +202,17 @@ class OrderService extends BaseService {
         },
       } = log as any
 
-      this.logger.info(`new order detect: ${orderId}. processing it ...`)
+      this.logger.info(`new order detected on ${this.l2EvmChain.name}. order id: ${orderId}. processing it ...`)
+      if (await this.db.collection("orders").findOne({ orderId })) {
+        this.logger.info(`order ${orderId} already processed. skipping it ...`)
+        return
+      }
 
       const originData = fillInstructions[0].originData
       const minReceivedAmount = minReceived[0].amount
       const minReceivedToken = minReceived[0].token
-      const minReceivedRecipient = minReceived[0].recipient
-      const minReceivedChainId = minReceived[0].chainId
+      // const minReceivedRecipient = minReceived[0].recipient
+      // const minReceivedChainId = minReceived[0].chainId
       const maxSpentAmount = maxSpent[0].amount
       const maxSpentToken = maxSpent[0].token
       const maxSpentRecipient = maxSpent[0].recipient
@@ -120,7 +223,7 @@ class OrderService extends BaseService {
 
       // TODO: calculate the best price for this swap
       this.logger.info(
-        `swapping ${minReceivedAmount} ${minReceivedChainId}:${minReceivedToken} for ${maxSpentAmount} ${maxSpentChainId}:${maxSpentToken} to ${maxSpentChainId}:${maxSpentRecipient}...`,
+        `swapping from ${this.l2EvmChain.name} to Aztec ${minReceivedAmount} ${minReceivedToken} for ${maxSpentAmount} ${maxSpentToken} to ${maxSpentRecipient}...`,
       )
 
       try {
@@ -177,26 +280,49 @@ class OrderService extends BaseService {
           .wait()
       }
 
-      this.logger.info(`order ${orderId} filled succesfully. tx hash: ${receipt.txHash.toString()}. storing it ...`)
-
-      await this.db.collection("orders").findOneAndUpdate(
-        { orderId },
-        {
-          $setOnInsert: {
-            ...(log as any).args,
-            fillTxHash: receipt.txHash.toString(),
-            fillerData,
-            status: orderStatus,
-          },
-        },
-        { upsert: true, returnDocument: "after" },
+      this.logger.info(
+        `order ${orderId} filled succesfully. tx hash: Aztec:${receipt.txHash.toString()}. storing it ...`,
       )
+      await this.addOrder({
+        orderId,
+        fillerData,
+        fillTxHash: receipt.txHash.toString(),
+        log: (log as any).args,
+        orderStatus,
+      })
     } catch (err) {
       this.logger.error(err)
       throw err
     } finally {
       release()
     }
+  }
+
+  private async addOrder({
+    orderId,
+    fillerData,
+    fillTxHash,
+    orderStatus,
+    log,
+  }: {
+    orderId: `0x${string}`
+    fillerData: `0x${string}`
+    fillTxHash: `0x${string}`
+    orderStatus: "initiatedPrivately" | "filled"
+    log: any
+  }) {
+    return await this.db.collection("orders").findOneAndUpdate(
+      { orderId },
+      {
+        $setOnInsert: {
+          ...log,
+          fillTxHash: fillTxHash,
+          fillerData,
+          status: orderStatus,
+        },
+      },
+      { upsert: true, returnDocument: "after" },
+    )
   }
 }
 

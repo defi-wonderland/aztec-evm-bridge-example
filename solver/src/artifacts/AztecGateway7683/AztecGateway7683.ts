@@ -179,12 +179,6 @@ export class AztecGateway7683Contract extends ContractBase {
     ) => ContractFunctionInteraction) &
       Pick<ContractMethod, "selector">
 
-    /** get_config() */
-    get_config: (() => ContractFunctionInteraction) & Pick<ContractMethod, "selector">
-
-    /** get_config_private() */
-    get_config_private: (() => ContractFunctionInteraction) & Pick<ContractMethod, "selector">
-
     /** get_filled_order_block_number(order_id_bytes: array) */
     get_filled_order_block_number: ((order_id_bytes: (bigint | number)[]) => ContractFunctionInteraction) &
       Pick<ContractMethod, "selector">

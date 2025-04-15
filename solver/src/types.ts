@@ -4,12 +4,12 @@ export interface Output {
   token: `0x${string}`
   recipient: `0x${string}`
   chainId: number
-  amount: number
+  amount: bigint
 }
 
 export interface FillInstruction {
   destinationSettler: `0x${string}`
-  bytes: `0x${string}`
+  originData: `0x${string}`
   destinationChainId: number
 }
 
