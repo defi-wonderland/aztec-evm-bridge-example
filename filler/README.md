@@ -1,4 +1,4 @@
-# Solver
+# Filler
 
 ## 📦 Installation
 
@@ -12,7 +12,7 @@ Then, clone the repository and install dependencies:
 
 ```sh
 git clone https://github.com/substance-labs/aztec-evm-bridge
-cd solver
+cd filler
 nvm use
 bun install
 ```

@@ -28,7 +28,7 @@ const AZTEC_WATCH_INTERVAL_TIME_MS = Number(process.env.AZTEC_WATCH_INTERVAL_TIM
 const main = async () => {
   const mongoClient = new MongoClient(process.env.MONGO_DB_URI as string)
   await mongoClient.connect()
-  const db = mongoClient.db((process.env.MONGO_DB_NAME as string) || "solver")
+  const db = mongoClient.db((process.env.MONGO_DB_NAME as string) || "filler")
 
   const aztecWallet = await getAztecWallet()
   logger.info("registering gateway contract into the PXE ...")
