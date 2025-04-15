@@ -14,12 +14,12 @@ import {
   ORDER_STATUS_INITIATED_PRIVATELY,
   PRIVATE_ORDER_HEX,
 } from "../constants.js"
-import BaseService from "./BaseService"
+import BaseService from "./base.service.js"
 import { hexToUintArray } from "../utils/bytes.js"
 
 import type { Chain, Log } from "viem"
 import type { Wallet } from "@aztec/aztec.js"
-import type { BaseServiceOpts } from "./BaseService"
+import type { BaseServiceOpts } from "./base.service.js"
 import type MultiClient from "../MultiClient.js"
 
 export type OrderServiceOpts = BaseServiceOpts & {

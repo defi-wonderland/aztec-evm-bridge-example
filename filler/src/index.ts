@@ -3,17 +3,17 @@ import * as chains from "viem/chains"
 import { AztecAddress } from "@aztec/aztec.js"
 import { MongoClient } from "mongodb"
 
-import EvmWatcher from "./watchers/EvmWatcher.js"
+import EvmWatcher from "./watchers/evm.watcher.js"
+import AztecWatcher from "./watchers/aztec.watcher.js"
+import OrderService from "./services/order.service.js"
+import SettlementService from "./services/settlement.service.js"
 import logger from "./utils/logger.js"
+import MultiClient from "./MultiClient.js"
 import { getAztecNode, getAztecWallet, getPxe, registerContract } from "./utils/aztec.js"
 import l2Gateway7683Abi from "./abis/l2Gateway7683.js"
 import { AztecGateway7683ContractArtifact } from "./artifacts/AztecGateway7683/AztecGateway7683.js"
-import OrderService from "./services/OrderService.js"
-import SettlementService from "./services/SettlementService.js"
-import MultiClient from "./MultiClient.js"
 
 import type { Log } from "viem"
-import AztecWatcher from "./watchers/AztecWatcher.js"
 
 const AZTEC_GATEWAY_ADDRESS = process.env.AZTEC_GATEWAY_ADDRESS as `0x${string}`
 const L2_EVM_GATEWAY_ADDRESS = process.env.L2_EVM_GATEWAY_ADDRESS as `0x${string}`

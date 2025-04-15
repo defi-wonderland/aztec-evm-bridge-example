@@ -7,7 +7,7 @@ const { BeaconBlock, SignedBeaconBlock } = ssz.electra
 const { createProof, ProofType } = await import("@chainsafe/persistent-merkle-tree")
 import { Mutex } from "async-mutex"
 
-import BaseService from "./BaseService"
+import BaseService from "./base.service"
 import {
   AZTEC_7683_CHAIN_ID,
   AZTEC_VERSION,
@@ -26,7 +26,7 @@ import { hexToUintArray } from "../utils/bytes"
 
 import type { Chain } from "viem"
 import type { AztecNode, PXE, Wallet } from "@aztec/aztec.js"
-import type { BaseServiceOpts } from "./BaseService"
+import type { BaseServiceOpts } from "./base.service"
 import type { Order } from "../types"
 import type MultiClient from "../MultiClient"
 
