@@ -106,7 +106,7 @@ export const parseResolvedCrossChainOrder = (resolvedOrder: string) => {
     ],
     maxSpent: [
       {
-        destinationChainId: parseInt(resolvedOrder.slice(resolvedOrder.length - 682, resolvedOrder.length - 674), 16),
+        chainId: parseInt(resolvedOrder.slice(resolvedOrder.length - 682, resolvedOrder.length - 674), 16),
         recipient: "0x" + resolvedOrder.slice(resolvedOrder.length - 746, resolvedOrder.length - 682),
         amount: BigInt("0x" + resolvedOrder.slice(resolvedOrder.length - 810, resolvedOrder.length - 746)),
         token: "0x" + resolvedOrder.slice(resolvedOrder.length - 874, resolvedOrder.length - 810),
