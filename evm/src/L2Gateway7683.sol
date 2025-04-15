@@ -9,7 +9,7 @@ import {IL2Gateway7683} from "./interfaces/IL2Gateway7683.sol";
 contract L2Gateway7683 is IL2Gateway7683, BasicSwap7683 {
     using BytesReader for bytes;
 
-    uint256 private constant FORWARDER_SETTLE_ORDER_SLOTS = 0;
+    uint256 private constant FORWARDER_SETTLED_ORDERS_SLOT = 0;
     bytes32 private constant SETTLE_ORDER_TYPE = sha256(abi.encodePacked("SETTLE_ORDER_TYPE"));
 
     address public immutable FORWARDER;
@@ -28,7 +28,7 @@ contract L2Gateway7683 is IL2Gateway7683, BasicSwap7683 {
         // The data stored in the _settledOrders mapping must contain the necessary (and compatible) information required to call _handleSettleOrder.
 
         bytes32 storageKey = _getStorageKeyByMessage(message);
-        require(_bytesToBytes32(accountProofParams.storageKey) == storageKey, InvalidStorageKey());
+        require(bytes32(accountProofParams.storageKey) == storageKey, InvalidStorageKey());
         require(_bytesToBool(accountProofParams.storageValue), InvalidStorageValue());
         require(StateValidator.validateState(FORWARDER, stateProofParams, accountProofParams), InvalidState());
 
@@ -43,7 +43,7 @@ contract L2Gateway7683 is IL2Gateway7683, BasicSwap7683 {
     }
 
     function _getStorageKeyByMessage(bytes memory message) internal pure returns (bytes32) {
-        return keccak256(abi.encode(sha256(message) >> 8, FORWARDER_SETTLE_ORDER_SLOTS)); // Represent it as an Aztec field element (BN254 scalar, encoded as bytes32)
+        return keccak256(abi.encode(sha256(message) >> 8, FORWARDER_SETTLED_ORDERS_SLOT)); // Represent it as an Aztec field element (BN254 scalar, encoded as bytes32)
     }
 
     function _localDomain() internal view override returns (uint32) {
@@ -55,9 +55,5 @@ contract L2Gateway7683 is IL2Gateway7683, BasicSwap7683 {
             let len := mload(data)
             res := mload(add(data, 0x20))
         }
-    }
-
-    function _bytesToBytes32(bytes memory data) internal pure returns (bytes32 res) {
-        return bytes32(data);
     }
 }

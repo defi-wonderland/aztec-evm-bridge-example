@@ -3,3 +3,4 @@
 @uniswap/permit2=lib/permit2
 @optimism/contracts=lib/optimism/packages/contracts-bedrock
 @aztec/contracts=lib/aztec-packages/l1-contracts/src
+@lib-keccak=lib/lib-keccak/contracts/lib
