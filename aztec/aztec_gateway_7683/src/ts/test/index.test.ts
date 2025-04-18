@@ -11,7 +11,6 @@ import {
 } from "@aztec/aztec.js"
 import { getInitialTestAccountsWallets } from "@aztec/accounts/testing"
 import { spawn } from "child_process"
-import { L1FeeJuicePortalManager } from "@aztec/aztec.js"
 import { createEthereumChain, createL1Clients, RollupContract } from "@aztec/ethereum"
 import { encodePacked, hexToBytes, padHex, sha256 } from "viem"
 import { sha256ToField } from "@aztec/foundation/crypto"
@@ -93,7 +92,6 @@ describe("AztecGateway7683", () => {
   let wallets: AccountWallet[] = []
   let logger: Logger
   let sandboxInstance
-  let l1PortalManager: L1FeeJuicePortalManager
   let skipSandbox: boolean
   let publicClient: any
   let version: bigint
@@ -118,7 +116,6 @@ describe("AztecGateway7683", () => {
 
     const clients = createL1Clients(chain.rpcUrls, MNEMONIC, chain.chainInfo)
     publicClient = clients.publicClient
-    l1PortalManager = await L1FeeJuicePortalManager.new(pxe, publicClient, clients.walletClient, logger)
 
     const l1Contracts = (await pxe.getNodeInfo()).l1ContractAddresses
     const rollup = new RollupContract(publicClient, l1Contracts.rollupAddress)
