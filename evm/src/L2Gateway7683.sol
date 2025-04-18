@@ -34,7 +34,7 @@ contract L2Gateway7683 is IL2Gateway7683, BasicSwap7683 {
 
         bytes32 orderType = message.readBytes32(0);
         bytes32 orderId = message.readBytes32(32);
-        bytes32 receiver = message.readBytes32(64);
+        bytes32 receiver = message.readBytes32(64); // filler data
         require(orderType == SETTLE_ORDER_TYPE, invalidOrderType());
 
         // NOTE: No need to check the sender, as the forwarder verifies
