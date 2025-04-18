@@ -537,7 +537,7 @@ describe("AztecGateway7683", () => {
     const content = sha256ToField([
       Buffer.from(SETTLE_ORDER_TYPE.slice(2), "hex"),
       Buffer.from(orderId.slice(2), "hex"),
-      Buffer.from(fillerData, "hex"),
+      Buffer.from(fillerData.slice(2), "hex"),
     ])
 
     const l2ToL1Message = sha256ToField([
