@@ -12,7 +12,7 @@ import {
 import { getInitialTestAccountsWallets } from "@aztec/accounts/testing"
 import { spawn } from "child_process"
 import { L1FeeJuicePortalManager } from "@aztec/aztec.js"
-import { createEthereumChain, createL1Clients } from "@aztec/ethereum"
+import { createEthereumChain, createL1Clients, RollupContract } from "@aztec/ethereum"
 import { encodePacked, hexToBytes, padHex, sha256 } from "viem"
 import { sha256ToField } from "@aztec/foundation/crypto"
 import { computePartialAddress } from "@aztec/stdlib/contract"
@@ -24,7 +24,7 @@ import { TokenContract } from "../../artifacts/Token.js"
 
 const MNEMONIC = "test test test test test test test test test test test junk"
 const PORTAL_ADDRESS = EthAddress.ZERO
-const SETTLE_ORDER_TYPE = "191ea776bd6e0cd56a6d44ba4aea2fec468b4a0b4c1d880d4025929eeb615d0d"
+const SETTLE_ORDER_TYPE = "0x191ea776bd6e0cd56a6d44ba4aea2fec468b4a0b4c1d880d4025929eeb615d0d"
 const ORDER_DATA_TYPE = "0xf00c3bf60c73eb97097f1c9835537da014e0b755fe94b25d7ac8401df66716a0"
 const SECRET = padHex(("0x" + Buffer.from("secret", "utf-8").toString("hex")) as `0x${string}`)
 const SECRET_HASH = sha256(SECRET)
@@ -57,17 +57,26 @@ const setup = async ({ admin, pxe, receiver }: { admin: AccountWallet; pxe: PXE;
   const gatewayPublicKeys = (await deriveKeys(gatewaySecretKey)).publicKeys
   const gatewayDeployment = AztecGateway7683Contract.deployWithPublicKeys(gatewayPublicKeys, admin, PORTAL_ADDRESS)
   const gatewayInstance = await gatewayDeployment.getInstance()
-  await pxe.registerAccount(gatewaySecretKey, await computePartialAddress(gatewayInstance))
   const gateway = await gatewayDeployment.send().deployed()
-  const token = await TokenContract.deploy(
+
+  const tokenSecretKey = Fr.random()
+  const tokenPublicKeys = (await deriveKeys(tokenSecretKey)).publicKeys
+  const tokenDeployment = TokenContract.deployWithPublicKeys(
+    tokenPublicKeys,
     admin,
     admin.getAddress(),
     "TestToken0000000000000000000000",
     "TT00000000000000000000000000000",
     18,
   )
-    .send()
-    .deployed()
+  const tokenInstance = await tokenDeployment.getInstance()
+  const token = await tokenDeployment.send().deployed()
+
+  await pxe.registerAccount(gatewaySecretKey, await computePartialAddress(gatewayInstance))
+  await pxe.registerAccount(tokenSecretKey, await computePartialAddress(tokenInstance))
+  //await pxe.registerContract({ instance: gatewayInstance, artifact: AztecGateway7683Contract.artifact })
+  //await pxe.registerContract({ instance: tokenInstance, artifact: TokenContract.artifact })
+
   await token
     .withWallet(admin)
     .methods.mint_to_private(admin.getAddress(), receiver.getAddress(), 1000000000n)
@@ -89,6 +98,7 @@ describe("AztecGateway7683", () => {
   let l1PortalManager: L1FeeJuicePortalManager
   let skipSandbox: boolean
   let publicClient: any
+  let version: bigint
 
   beforeAll(async () => {
     skipSandbox = process.env.SKIP_SANDBOX === "true"
@@ -111,6 +121,10 @@ describe("AztecGateway7683", () => {
     const clients = createL1Clients(chain.rpcUrls, MNEMONIC, chain.chainInfo)
     publicClient = clients.publicClient
     l1PortalManager = await L1FeeJuicePortalManager.new(pxe, publicClient, clients.walletClient, logger)
+
+    const l1Contracts = (await pxe.getNodeInfo()).l1ContractAddresses
+    const rollup = new RollupContract(publicClient, l1Contracts.rollupAddress)
+    version = await rollup.getVersion()
   })
 
   afterAll(async () => {
@@ -119,7 +133,7 @@ describe("AztecGateway7683", () => {
     }
   })
 
-  it("should open a public order", async () => {
+  it("should open a public order and settle", async () => {
     const [admin, filler, user] = wallets
     const { token, gateway } = await setup({ admin, pxe, receiver: user })
 
@@ -205,10 +219,24 @@ describe("AztecGateway7683", () => {
     expect(parsedResolvedCrossChainOrder.minReceived[0].recipient).toBe(padHex("0x00"))
     expect(parsedResolvedCrossChainOrder.minReceived[0].token).toBe(token.address.toString())
     expect(parsedResolvedCrossChainOrder.user).toBe(user.getAddress().toString())
+
+    const balancePre = await token.methods.balance_of_public(filler.getAddress()).simulate()
+    await gateway
+      .withWallet(filler)
+      .methods.settle(
+        Array.from(hexToBytes(parsedResolvedCrossChainOrder.orderId as `0x${string}`)),
+        Array.from(hexToBytes(orderData)),
+        Array.from(hexToBytes(filler.getAddress().toString())),
+        0n, // TODO
+      )
+      .send()
+      .wait()
+    const balancePost = await token.methods.balance_of_public(filler.getAddress()).simulate()
+    expect(balancePost).toBe(balancePre + amountIn)
   })
 
-  it("should open a private order", async () => {
-    const [admin, user] = wallets
+  it("should open a private order and settle", async () => {
+    const [admin, filler, user] = wallets
     const { token, gateway } = await setup({ admin, pxe, receiver: user })
 
     const amountIn = 100n
@@ -217,7 +245,6 @@ describe("AztecGateway7683", () => {
       caller: gateway.address,
       action: token.withWallet(user).methods.transfer_in_private(user.getAddress(), gateway.address, amountIn, nonce),
     })
-    await user.addAuthWitness(witness)
 
     const orderData = encodePacked(
       [
@@ -253,15 +280,30 @@ describe("AztecGateway7683", () => {
     )
 
     const fromBlock = await pxe.getBlockNumber()
-    await gateway
+    const receipt = await gateway
       .withWallet(user)
-      .methods.open_private({
-        fill_deadline: FILL_DEADLINE,
-        order_data: Array.from(hexToBytes(orderData)),
-        order_data_type: Array.from(hexToBytes(ORDER_DATA_TYPE)),
+      .methods.open_private(
+        {
+          fill_deadline: FILL_DEADLINE,
+          order_data: Array.from(hexToBytes(orderData)),
+          order_data_type: Array.from(hexToBytes(ORDER_DATA_TYPE)),
+        },
+        filler.getAddress(),
+      )
+      .with({
+        authWitnesses: [witness],
       })
       .send()
       .wait()
+
+    await token.withWallet(filler).methods.sync_notes().simulate()
+    const notes = await pxe.getNotes({
+      txHash: receipt.txHash,
+      recipient: gateway.address,
+      contractAddress: token.address,
+      scopes: [gateway.address],
+    })
+    expect(notes.length).toBe(1)
 
     const { logs } = await pxe.getPublicLogs({
       fromBlock: fromBlock - 1,
@@ -285,6 +327,20 @@ describe("AztecGateway7683", () => {
     expect(parsedResolvedCrossChainOrder.minReceived[0].recipient).toBe(padHex("0x00"))
     expect(parsedResolvedCrossChainOrder.minReceived[0].token).toBe(token.address.toString())
     expect(parsedResolvedCrossChainOrder.user).toBe(PRIVATE_SENDER)
+
+    const balancePre = await token.methods.balance_of_private(filler.getAddress()).simulate()
+    await gateway
+      .withWallet(filler)
+      .methods.settle_private(
+        Array.from(hexToBytes(parsedResolvedCrossChainOrder.orderId as `0x${string}`)),
+        Array.from(hexToBytes(orderData)),
+        Array.from(hexToBytes(filler.getAddress().toString())),
+        0n, // TODO
+      )
+      .send()
+      .wait()
+    const balancePost = await token.methods.balance_of_private(filler.getAddress()).simulate()
+    expect(balancePost).toBe(balancePre + amountIn)
   })
 
   it("should fill a public order and send the settlement message to the forwarder via portal", async () => {
@@ -364,14 +420,14 @@ describe("AztecGateway7683", () => {
     expect(fillerData).toBe(parsedLog.fillerData)
 
     const content = sha256ToField([
-      Buffer.from(SETTLE_ORDER_TYPE, "hex"),
+      Buffer.from(SETTLE_ORDER_TYPE.slice(2), "hex"),
       Buffer.from(orderId.slice(2), "hex"),
       Buffer.alloc(32, 0),
     ])
 
     const l2ToL1Message = sha256ToField([
       gateway.address.toBuffer(),
-      new Fr(1).toBuffer(), // aztec version
+      new Fr(version).toBuffer(), // aztec version
       PORTAL_ADDRESS.toBuffer32(),
       new Fr(publicClient.chain.id).toBuffer(),
       content.toBuffer(),
@@ -380,6 +436,7 @@ describe("AztecGateway7683", () => {
     const filledOrderBlockNumber = await gateway.methods
       .get_filled_order_block_number(Array.from(hexToBytes(orderId)))
       .simulate()
+
     const [l2ToL1MessageIndex, siblingPath] = await pxe.getL2ToL1MembershipWitness(
       parseInt(filledOrderBlockNumber),
       l2ToL1Message,
@@ -429,7 +486,7 @@ describe("AztecGateway7683", () => {
     )
 
     const orderId = sha256(originData)
-    const fillerData = "0x0000000000000000000000000000000000000000000000000000000000000000"
+    const fillerData = filler.getAddress().toString()
 
     await (
       await filler.setPublicAuthWit(
@@ -476,5 +533,31 @@ describe("AztecGateway7683", () => {
       )
       .send()
       .wait()
+
+    const content = sha256ToField([
+      Buffer.from(SETTLE_ORDER_TYPE.slice(2), "hex"),
+      Buffer.from(orderId.slice(2), "hex"),
+      Buffer.from(fillerData, "hex"),
+    ])
+
+    const l2ToL1Message = sha256ToField([
+      gateway.address.toBuffer(),
+      new Fr(version).toBuffer(), // aztec version
+      PORTAL_ADDRESS.toBuffer32(),
+      new Fr(publicClient.chain.id).toBuffer(),
+      content.toBuffer(),
+    ])
+
+    const filledOrderBlockNumber = await gateway.methods
+      .get_filled_order_block_number(Array.from(hexToBytes(orderId)))
+      .simulate()
+
+    const [l2ToL1MessageIndex, siblingPath] = await pxe.getL2ToL1MembershipWitness(
+      parseInt(filledOrderBlockNumber),
+      l2ToL1Message,
+    )
+
+    expect(l2ToL1MessageIndex).toBe(0n)
+    expect(siblingPath.pathSize).toBe(1)
   })
 })
