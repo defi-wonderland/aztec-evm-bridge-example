@@ -17,7 +17,7 @@ import { encodePacked, hexToBytes, padHex, sha256 } from "viem"
 import { sha256ToField } from "@aztec/foundation/crypto"
 import { computePartialAddress } from "@aztec/stdlib/contract"
 
-import { parseFilledLog, parseOpenLog, parseResolvedCrossChainOrder } from "./utils.js"
+import { parseFilledLog, parseOpenLog, parseResolvedCrossChainOrder, parseSettledLog } from "./utils.js"
 
 import { AztecGateway7683Contract } from "../../artifacts/AztecGateway7683.js"
 import { TokenContract } from "../../artifacts/Token.js"
@@ -74,8 +74,6 @@ const setup = async ({ admin, pxe, receiver }: { admin: AccountWallet; pxe: PXE;
 
   await pxe.registerAccount(gatewaySecretKey, await computePartialAddress(gatewayInstance))
   await pxe.registerAccount(tokenSecretKey, await computePartialAddress(tokenInstance))
-  //await pxe.registerContract({ instance: gatewayInstance, artifact: AztecGateway7683Contract.artifact })
-  //await pxe.registerContract({ instance: tokenInstance, artifact: TokenContract.artifact })
 
   await token
     .withWallet(admin)
@@ -136,7 +134,6 @@ describe("AztecGateway7683", () => {
   it("should open a public order and settle", async () => {
     const [admin, filler, user] = wallets
     const { token, gateway } = await setup({ admin, pxe, receiver: user })
-    console.log("gateway", gateway.address)
 
     const amountIn = 100n
     const nonce = Fr.random()
@@ -187,7 +184,7 @@ describe("AztecGateway7683", () => {
       ],
     )
 
-    const fromBlock = await pxe.getBlockNumber()
+    let fromBlock = await pxe.getBlockNumber()
     await gateway
       .withWallet(user)
       .methods.open({
@@ -234,6 +231,16 @@ describe("AztecGateway7683", () => {
       .wait()
     const balancePost = await token.methods.balance_of_public(filler.getAddress()).simulate()
     expect(balancePost).toBe(balancePre + amountIn)
+
+    fromBlock = await pxe.getBlockNumber()
+    const { logs: logs2 } = await pxe.getPublicLogs({
+      fromBlock: fromBlock - 1,
+      toBlock: fromBlock + 2,
+      contractAddress: gateway.address,
+    })
+    const parsedSettledLog = parseSettledLog(logs2[logs2.length - 1].log.log)
+    expect(parsedSettledLog.orderId).toBe(parsedResolvedCrossChainOrder.orderId)
+    expect(parsedSettledLog.receiver).toBe(filler.getAddress().toString())
   })
 
   it("should open a private order and settle", async () => {
@@ -280,7 +287,7 @@ describe("AztecGateway7683", () => {
       ],
     )
 
-    const fromBlock = await pxe.getBlockNumber()
+    let fromBlock = await pxe.getBlockNumber()
     const receipt = await gateway
       .withWallet(user)
       .methods.open_private(
@@ -342,6 +349,16 @@ describe("AztecGateway7683", () => {
       .wait()
     const balancePost = await token.methods.balance_of_private(filler.getAddress()).simulate()
     expect(balancePost).toBe(balancePre + amountIn)
+
+    fromBlock = await pxe.getBlockNumber()
+    const { logs: logs2 } = await pxe.getPublicLogs({
+      fromBlock: fromBlock - 1,
+      toBlock: fromBlock + 2,
+      contractAddress: gateway.address,
+    })
+    const parsedSettledLog = parseSettledLog(logs2[logs2.length - 1].log.log)
+    expect(parsedSettledLog.orderId).toBe(parsedResolvedCrossChainOrder.orderId)
+    expect(parsedSettledLog.receiver).toBe(filler.getAddress().toString())
   })
 
   it("should fill a public order and send the settlement message to the forwarder via portal", async () => {

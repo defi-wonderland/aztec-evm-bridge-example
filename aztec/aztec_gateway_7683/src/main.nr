@@ -25,7 +25,7 @@ pub contract AztecGateway7683 {
     use crate::{
         config::Config,
         types::{
-            events::{Filled, Open},
+            events::{Filled, Open, Settled},
             helpers::InternalRCOParams,
             onchain_cross_chain_order::OnchainCrossChainOrder,
             order_data::{
@@ -321,7 +321,8 @@ pub contract AztecGateway7683 {
 
         storage.order_status.at(order_id).write(SETTLED);
 
-        // TODO: emit Settle event
+        context.emit_public_log(Settled { order_id: order_id_bytes, receiver: filler_data_bytes }
+            .pack());
     }
 
     #[private]
@@ -365,7 +366,9 @@ pub contract AztecGateway7683 {
             ._update_order_status(order_id, SETTLED)
             .enqueue(&mut context);
 
-        // TODO: emit Settle event
+        AztecGateway7683::at(context.this_address())
+            ._emit_settled(order_id_bytes, filler_data_bytes)
+            .enqueue(&mut context);
     }
 
     #[internal]
@@ -433,6 +436,12 @@ pub contract AztecGateway7683 {
         let event = Open::new(order_id_bytes, resolved_order_bytes);
         context.emit_public_log(event.open1.pack());
         context.emit_public_log(event.open2.pack());
+    }
+
+    #[public]
+    #[internal]
+    fn _emit_settled(order_id_bytes: [u8; 32], receiver: [u8; 32]) {
+        context.emit_public_log(Settled { order_id: order_id_bytes, receiver }.pack());
     }
 
     #[public]

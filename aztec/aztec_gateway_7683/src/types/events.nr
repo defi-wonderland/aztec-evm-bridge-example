@@ -14,7 +14,7 @@ pub struct Filled {
 // 301 + 32 + 32 = 365      365 / 31 = 11.74 = 12 + 1 (residual bytes) = 13
 impl Packable<13> for Filled {
     fn pack(self) -> [Field; 13] {
-        let mut result = [0; 13];
+        let mut packed = [0; 13];
         let mut residual_bytes = [0; 31];
 
         let mut order_id_31 = [0; 31];
@@ -36,7 +36,7 @@ impl Packable<13> for Filled {
                     partial[j] = self.origin_data[k];
                 }
             }
-            result[i + 1] = Field::from_be_bytes(partial);
+            packed[i + 1] = Field::from_be_bytes(partial);
 
             if i < 9 {
                 // no residual bytes for the last one
@@ -44,10 +44,10 @@ impl Packable<13> for Filled {
             }
         }
 
-        result[0] = Field::from_be_bytes::<31>(order_id_31);
-        result[11] = Field::from_be_bytes::<31>(filler_data_31);
-        result[12] = Field::from_be_bytes::<31>(residual_bytes);
-        result
+        packed[0] = Field::from_be_bytes::<31>(order_id_31);
+        packed[11] = Field::from_be_bytes::<31>(filler_data_31);
+        packed[12] = Field::from_be_bytes::<31>(residual_bytes);
+        packed
     }
 
     fn unpack(fields: [Field; 13]) -> Self {
@@ -65,7 +65,7 @@ pub struct Open1 {
 
 impl Packable<13> for Open1 {
     fn pack(self) -> [Field; 13] {
-        let mut result = [0; 13];
+        let mut packed = [0; 13];
         let mut residual_bytes = [0; 31];
 
         let mut order_id_31 = [0; 31];
@@ -84,7 +84,7 @@ impl Packable<13> for Open1 {
                     partial[j] = self.resolved_order[k];
                 }
             }
-            result[i + 1] = Field::from_be_bytes(partial);
+            packed[i + 1] = Field::from_be_bytes(partial);
 
             let residual_bytes_offset = offset + 31;
             if residual_bytes_offset < 340 {
@@ -92,9 +92,9 @@ impl Packable<13> for Open1 {
             }
         }
 
-        result[0] = Field::from_be_bytes::<31>(order_id_31);
-        result[12] = Field::from_be_bytes::<31>(residual_bytes);
-        result
+        packed[0] = Field::from_be_bytes::<31>(order_id_31);
+        packed[12] = Field::from_be_bytes::<31>(residual_bytes);
+        packed
     }
 
     fn unpack(fields: [Field; 13]) -> Self {
@@ -112,7 +112,7 @@ pub struct Open2 {
 
 impl Packable<11> for Open2 {
     fn pack(self) -> [Field; 11] {
-        let mut result = [0; 11];
+        let mut packed = [0; 11];
         let mut residual_bytes = [0; 31];
 
         let mut order_id_31 = [0; 31];
@@ -131,7 +131,7 @@ impl Packable<11> for Open2 {
                     partial[j] = self.resolved_order[k];
                 }
             }
-            result[i + 1] = Field::from_be_bytes(partial);
+            packed[i + 1] = Field::from_be_bytes(partial);
 
             let residual_bytes_offset = offset + 31;
             if residual_bytes_offset < 273 {
@@ -139,9 +139,9 @@ impl Packable<11> for Open2 {
             }
         }
 
-        result[0] = Field::from_be_bytes::<31>(order_id_31);
-        result[10] = Field::from_be_bytes::<31>(residual_bytes);
-        result
+        packed[0] = Field::from_be_bytes::<31>(order_id_31);
+        packed[10] = Field::from_be_bytes::<31>(residual_bytes);
+        packed
     }
 
     fn unpack(fields: [Field; 11]) -> Self {
@@ -170,5 +170,38 @@ impl Open {
             open1: Open1 { order_id, resolved_order: resolved_order1 },
             open2: Open2 { order_id, resolved_order: resolved_order2 },
         }
+    }
+}
+
+//#[event]
+#[derive(Serialize)]
+pub struct Settled {
+    order_id: [u8; 32],
+    receiver: [u8; 32],
+}
+
+impl Packable<3> for Settled {
+    fn pack(self) -> [Field; 3] {
+        let mut packed = [0; 3];
+        let mut residual_bytes = [0; 31];
+
+        let mut order_id_31 = [0; 31];
+        let mut receiver_31 = [0; 31];
+        for i in 0..31 {
+            order_id_31[i] = self.order_id[i];
+            receiver_31[i] = self.receiver[i]
+        }
+        residual_bytes[0] = self.order_id[31];
+        residual_bytes[1] = self.receiver[31];
+
+        packed[0] = Field::from_be_bytes::<31>(order_id_31);
+        packed[1] = Field::from_be_bytes::<31>(receiver_31);
+        packed[2] = Field::from_be_bytes::<31>(residual_bytes);
+        packed
+    }
+
+    fn unpack(fields: [Field; 3]) -> Self {
+        assert(true == false, "not implemented");
+        Self { order_id: [0; 32], receiver: [0; 32] }
     }
 }

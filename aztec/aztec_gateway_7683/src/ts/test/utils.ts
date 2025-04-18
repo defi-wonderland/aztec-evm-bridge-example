@@ -95,6 +95,19 @@ export const parseOpenLog = (log1: Fr[], log2: Fr[]) => {
   }
 }
 
+export const parseSettledLog = (log: Fr[]) => {
+  let orderId = log[0].toString()
+  const residualBytes = log[2].toString()
+  const receiver = "0x" + log[1].toString().slice(4) + residualBytes.slice(6, 8)
+
+  orderId = "0x" + orderId.slice(4) + residualBytes.slice(4, 6)
+
+  return {
+    orderId,
+    receiver,
+  }
+}
+
 export const parseResolvedCrossChainOrder = (resolvedOrder: string) => {
   return {
     fillInstructions: [
