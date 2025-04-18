@@ -16,6 +16,6 @@ export const ORDER_FILLED = 2n
 
 export const PORTAL_ADDRESS = EthAddress.ZERO // TODO
 export const FORWARDER_CHAIN_ID = 31337
-export const AZTEC_VERSION = 1
+export const AZTEC_VERSION = 1369311804 // TODO read it from the RollupContract
 
 export const FORWARDER_SETTLE_ORDER_SLOTS = 0n

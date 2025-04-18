@@ -136,6 +136,7 @@ describe("AztecGateway7683", () => {
   it("should open a public order and settle", async () => {
     const [admin, filler, user] = wallets
     const { token, gateway } = await setup({ admin, pxe, receiver: user })
+    console.log("gateway", gateway.address)
 
     const amountIn = 100n
     const nonce = Fr.random()
