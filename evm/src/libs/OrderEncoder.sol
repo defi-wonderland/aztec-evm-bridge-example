@@ -41,6 +41,10 @@ library OrderEncoder {
         "bytes32 data)"
     );
 
+    uint8 constant PUBLIC_ORDER = 0;
+    uint8 constant PRIVATE_ORDER = 1;
+    uint8 constant PUBLIC_ORDER_WITH_HOOK = 2;
+    uint8 constant PRIVATE_ORDER_WITH_HOOK = 3;
     bytes32 constant ORDER_DATA_TYPE_HASH = sha256(ORDER_DATA_TYPE);
 
     function orderDataType() internal pure returns (bytes32) {

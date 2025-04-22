@@ -8,6 +8,7 @@ import {TypeCasts} from "@hyperlane-xyz/libs/TypeCasts.sol";
 
 import {Base7683} from "./Base7683.sol";
 import {OrderData, OrderEncoder} from "./libs/OrderEncoder.sol";
+import {IHook7683Recipient} from "./interfaces/IHook7683Recipient.sol";
 
 import {
     GaslessCrossChainOrder,
@@ -319,6 +320,13 @@ abstract contract BasicSwap7683 is Base7683 {
             Address.sendValue(payable(recipient), orderData.amountOut);
         } else {
             IERC20(outputToken).safeTransferFrom(msg.sender, recipient, orderData.amountOut);
+        }
+
+        if (
+            orderData.orderType == OrderEncoder.PUBLIC_ORDER_WITH_HOOK
+                || orderData.orderType == OrderEncoder.PRIVATE_ORDER_WITH_HOOK
+        ) {
+            IHook7683Recipient(recipient).onFilledOrder(orderData);
         }
     }
 }

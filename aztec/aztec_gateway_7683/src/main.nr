@@ -29,7 +29,8 @@ pub contract AztecGateway7683 {
             helpers::InternalRCOParams,
             onchain_cross_chain_order::OnchainCrossChainOrder,
             order_data::{
-                ORDER_DATA_LENGTH, ORDER_DATA_TYPE, OrderData, PRIVATE_ORDER, PUBLIC_ORDER,
+                ORDER_DATA_LENGTH, ORDER_DATA_TYPE, OrderData, PRIVATE_ORDER,
+                PRIVATE_ORDER_WITH_HOOK, PUBLIC_ORDER, PUBLIC_ORDER_WITH_HOOK,
             },
             resolved_cross_chain_order::{
                 FILL_INSTRUCTIONS_MAX_INSTRUCTIONS, FillInstruction, MAX_SPENT_MAX_OUTPUTS,
@@ -70,8 +71,12 @@ pub contract AztecGateway7683 {
         let resolved_order = data.resolved_cross_chain_order;
         let order_id = data.order_id;
         let nonce = Field::from_be_bytes(data.order_data.sender_nonce);
+        let order_type = data.order_data.order_type;
 
-        assert(data.order_data.order_type == PUBLIC_ORDER, "Not a public order");
+        assert(
+            (order_type == PUBLIC_ORDER) | (order_type == PUBLIC_ORDER_WITH_HOOK),
+            "Not a public order",
+        );
         assert(
             data.order_data.origin_domain == LOCAL_DESTINATION_DOMAIN,
             "Invalid order origin domain",
@@ -113,8 +118,12 @@ pub contract AztecGateway7683 {
         let resolved_order = data.resolved_cross_chain_order;
         let order_id = data.order_id;
         let nonce = Field::from_be_bytes(data.order_data.sender_nonce);
+        let order_type = data.order_data.order_type;
 
-        assert(data.order_data.order_type == PRIVATE_ORDER, "Not a private order");
+        assert(
+            (order_type == PRIVATE_ORDER) | (order_type == PRIVATE_ORDER_WITH_HOOK),
+            "Not a private order",
+        );
         assert(
             data.order_data.origin_domain == LOCAL_DESTINATION_DOMAIN,
             "Invalid order origin domain",
@@ -191,7 +200,12 @@ pub contract AztecGateway7683 {
         );
 
         let order_data = OrderData::decode(origin_data_bytes);
-        assert(order_data.order_type == PUBLIC_ORDER, "Not a public order");
+        let order_type = order_data.order_type;
+
+        assert(
+            (order_type == PUBLIC_ORDER) | (order_type == PUBLIC_ORDER_WITH_HOOK),
+            "Not a public order",
+        );
         assert(order_id_bytes == sha256::digest(origin_data_bytes), "Invalid order id");
         assert(context.timestamp() as u32 <= order_data.fill_deadline, "Order fill expired");
         assert(
@@ -218,6 +232,7 @@ pub contract AztecGateway7683 {
                 filler_data_bytes, // at the moment filler data contains the ethereum address where the filler wants to receive the funds during the settlement
             )
             .call(&mut context);
+        // TODO: implements hook for when order_type = PUBLIC_ORDER_WITH_HOOK
 
         context.emit_public_log(Filled {
             order_id: order_id_bytes,
@@ -239,7 +254,12 @@ pub contract AztecGateway7683 {
         );
 
         let order_data = OrderData::decode(origin_data_bytes);
-        assert(order_data.order_type == PRIVATE_ORDER, "Not a private order");
+        let order_type = order_data.order_type;
+
+        assert(
+            (order_type == PRIVATE_ORDER) | (order_type == PRIVATE_ORDER_WITH_HOOK),
+            "Not a private order",
+        );
         assert(order_id_bytes == sha256::digest(origin_data_bytes), "Invalid order id");
         assert(context.timestamp() as u32 <= order_data.fill_deadline, "Order fill expired");
         assert(order_data.destination_domain == LOCAL_DESTINATION_DOMAIN, "Invalid order domain");
@@ -252,6 +272,8 @@ pub contract AztecGateway7683 {
                 0,
             )
             .call(&mut context);
+
+        // TODO: implements hook for when order_type = PRIVATE_ORDER_WITH_HOOK
 
         storage.claimable_orders.at(order_id).write(sha256_to_field(_get_order_pre_image(
             origin_data_bytes,
@@ -296,10 +318,14 @@ pub contract AztecGateway7683 {
         assert(storage.open_orders.at(order_id).read() == order_commitment, "Invalid order");
 
         let order_data = OrderData::decode(origin_data_bytes);
+        let order_type = order_data.order_type;
         // This check is necessary because if a user opens a private order, it means they have transferred
         // tokens privately. As a result, the public state (`token.public_balances`) is not updated,
         // making it impossible to call `transfer_in_public`, as it would fail.
-        assert(order_data.order_type == PUBLIC_ORDER, "Not a public order");
+        assert(
+            (order_type == PUBLIC_ORDER) | (order_type == PUBLIC_ORDER_WITH_HOOK),
+            "Not a public order",
+        );
 
         let content_hash =
             get_settle_content_hash(SETTLE_ORDER_TYPE, order_id_bytes, filler_data_bytes);
@@ -342,7 +368,12 @@ pub contract AztecGateway7683 {
             .enqueue(&mut context);
 
         let order_data = OrderData::decode(origin_data_bytes);
-        assert(order_data.order_type == PRIVATE_ORDER, "Not a private order");
+        let order_type = order_data.order_type;
+
+        assert(
+            (order_type == PRIVATE_ORDER) | (order_type == PRIVATE_ORDER_WITH_HOOK),
+            "Not a private order",
+        );
 
         let content_hash =
             get_settle_content_hash(SETTLE_ORDER_TYPE, order_id_bytes, filler_data_bytes);

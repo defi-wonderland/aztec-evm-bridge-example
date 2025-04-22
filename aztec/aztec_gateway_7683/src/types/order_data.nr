@@ -9,6 +9,8 @@ pub global ORDER_DATA_TYPE: [u8; 32] = [
 
 pub global PUBLIC_ORDER: u8 = 0;
 pub global PRIVATE_ORDER: u8 = 1;
+pub global PUBLIC_ORDER_WITH_HOOK: u8 = 2;
+pub global PRIVATE_ORDER_WITH_HOOK: u8 = 3;
 
 #[derive(Deserialize, Eq, Serialize)]
 pub struct OrderData {
