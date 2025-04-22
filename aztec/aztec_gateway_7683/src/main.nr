@@ -104,7 +104,7 @@ pub contract AztecGateway7683 {
     }
 
     #[private]
-    fn open_private(order: OnchainCrossChainOrder, filler_data: AztecAddress) {
+    fn open_private(order: OnchainCrossChainOrder) {
         assert(order.order_data_type == ORDER_DATA_TYPE, "Invalid order data type");
 
         // NOTE: Force the sender to be zero in order to avoid creating a connection between the sender and the recipient.

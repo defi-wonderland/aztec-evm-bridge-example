@@ -293,7 +293,6 @@ describe("AztecGateway7683", () => {
           order_data: Array.from(hexToBytes(orderData)),
           order_data_type: Array.from(hexToBytes(ORDER_DATA_TYPE)),
         },
-        filler.getAddress(),
       )
       .with({
         authWitnesses: [witness],
