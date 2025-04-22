@@ -177,8 +177,6 @@ pub contract AztecGateway7683 {
             &mut context,
         );
 
-        // TODO: store filled order
-
         AztecGateway7683::at(context.this_address())
             ._trigger_settlement(
                 order_id,
@@ -222,8 +220,11 @@ pub contract AztecGateway7683 {
             )
             .call(&mut context);
 
+        storage.claimable_orders.at(order_id).write(sha256_to_field(_get_order_pre_image(
+            origin_data_bytes,
+            filler_data_bytes,
+        )));
         storage.order_status.at(order_id).write(FILLED);
-        // TODO: store filled order
 
         AztecGateway7683::at(context.this_address())
             ._trigger_settlement(
@@ -264,6 +265,12 @@ pub contract AztecGateway7683 {
         assert(context.timestamp() as u32 <= order_data.fill_deadline, "Order fill expired");
         assert(order_data.destination_domain == LOCAL_DESTINATION_DOMAIN, "Invalid order domain");
 
+        storage.claimable_orders.at(order_id).write(sha256_to_field(_get_order_pre_image(
+            origin_data_bytes,
+            filler_data_bytes,
+        )));
+        storage.order_status.at(order_id).write(INITIATED_PRIVATELY);
+
         Token::at(u8_32_to_aztec_address(order_data.output_token))
             .transfer_in_public(
                 context.msg_sender(),
@@ -274,12 +281,6 @@ pub contract AztecGateway7683 {
             .call(&mut context);
 
         // TODO: implements hook for when order_type = PRIVATE_ORDER_WITH_HOOK
-
-        storage.claimable_orders.at(order_id).write(sha256_to_field(_get_order_pre_image(
-            origin_data_bytes,
-            filler_data_bytes,
-        )));
-        storage.order_status.at(order_id).write(INITIATED_PRIVATELY);
 
         context.emit_public_log(Filled {
             order_id: order_id_bytes,
