@@ -13,6 +13,8 @@ import {
   AZTEC_VERSION,
   FORWARDER_CHAIN_ID,
   FORWARDER_SETTLE_ORDER_SLOTS,
+  L2_GATEWAY_FILLED_ORDERS_SLOT,
+  OP_STACK_ANCHOR_REGISTRY_OP_SEPOLIA,
   ORDER_STATUS_FILLED,
   ORDER_STATUS_SETTLE_FORWARDED,
   ORDER_STATUS_SETTLED,
@@ -21,6 +23,7 @@ import {
 } from "../constants"
 import forwarderAbi from "../abis/forwarder"
 import l2Gateway7683Abi from "../abis/l2Gateway7683"
+import anchorRegistryAbi from "../abis/anchorRegistry"
 import { AztecGateway7683Contract } from "../artifacts/AztecGateway7683/AztecGateway7683"
 import { hexToUintArray } from "../utils/bytes"
 
@@ -107,7 +110,6 @@ class SettlementService extends BaseService {
           status: ORDER_STATUS_FILLED,
         })
         .toArray()
-
       for (const order of orders) {
         try {
           if (order.resolvedOrder.maxSpent[0].chainId === this.l2EvmChain.id) {
@@ -138,7 +140,66 @@ class SettlementService extends BaseService {
     const release = await this.forwardOrderSettlementMutex.acquire()
     try {
       this.logger.info(`forwarding settlement to Aztec for order ${order.orderId} ...`)
-      // TODO
+
+      // NOTE: At the moment we support only Optimism Sepolia
+
+      const l2EvmClient = this.evmMultiClient.getClientByChain(this.l2EvmChain)
+      const l1client = this.evmMultiClient.getClientByChain(this.l1Chain)
+
+      const [_, l2EvmblockNumber] = (await l1client.readContract({
+        abi: anchorRegistryAbi,
+        functionName: "getAnchorRoot",
+        args: [],
+        address: OP_STACK_ANCHOR_REGISTRY_OP_SEPOLIA,
+      })) as [`0x${string}`, bigint]
+
+      const storageKey = keccak256(
+        encodeAbiParameters([{ type: "bytes32" }, { type: "uint256" }], [order.orderId, L2_GATEWAY_FILLED_ORDERS_SLOT]),
+      )
+
+      const proof = await l2EvmClient.request({
+        method: "eth_getProof",
+        params: [this.l2EvmGatewayAddress, [storageKey], `0x${l2EvmblockNumber.toString(16)}`],
+      })
+
+      const accountProofParameters = {
+        storageKey: proof.storageProof[0]!.key,
+        storageValue: proof.storageProof[0]!.value,
+        accountProof: proof.accountProof,
+        storageProof: proof.storageProof[0]!.proof,
+      }
+
+      const forwardSettleTxHash = await l1client.writeContract({
+        abi: forwarderAbi,
+        account: l1client.account.address,
+        address: this.forwarderAddress,
+        args: [
+          order.orderId,
+          order.resolvedOrder.fillInstructions[0]!.originData,
+          order.fillerData!,
+          accountProofParameters,
+        ],
+        chain: this.l1Chain,
+        functionName: "forwardSettleToAztec",
+      })
+      this.logger.info(
+        `waiting for forwardSettleToAztec transaction confirmation of ${forwardSettleTxHash} for order ${order.orderId} ...`,
+      )
+      await waitForTransactionReceipt(l1client, { hash: forwardSettleTxHash })
+
+      this.logger.info(
+        `settlement succesfully forwarded to Aztec for order ${order.orderId}. tx hash: ${forwardSettleTxHash}`,
+      )
+      await this.db.collection("orders").findOneAndUpdate(
+        { orderId: order.orderId },
+        {
+          $set: {
+            forwardSettleTxHash,
+            status: ORDER_STATUS_SETTLE_FORWARDED,
+          },
+        },
+        { upsert: true, returnDocument: "after" },
+      )
     } catch (err) {
       this.logger.error(err)
       throw err
@@ -161,7 +222,7 @@ class SettlementService extends BaseService {
 
       const l2ToL1Message = sha256ToField([
         Buffer.from(this.aztecGatewayAddress.slice(2), "hex"),
-        new Fr(AZTEC_VERSION).toBuffer(), // aztec version
+        new Fr(AZTEC_VERSION).toBuffer(),
         PORTAL_ADDRESS.toBuffer32(),
         new Fr(FORWARDER_CHAIN_ID).toBuffer(),
         messageHash.toBuffer(),
@@ -180,10 +241,10 @@ class SettlementService extends BaseService {
         l2ToL1Message,
       )
 
-      const client = this.evmMultiClient.getClientByChain(this.l1Chain)
-      const forwardSettleTxHash = await client.writeContract({
+      const l1client = this.evmMultiClient.getClientByChain(this.l1Chain)
+      const forwardSettleTxHash = await l1client.writeContract({
         abi: forwarderAbi,
-        account: client.account.address,
+        account: l1client.account.address,
         address: this.forwarderAddress,
         args: [
           [
@@ -199,10 +260,14 @@ class SettlementService extends BaseService {
         chain: this.l1Chain,
         functionName: "forwardSettleToL2",
       })
-      this.logger.info(`waiting for transaction confirmation of ${forwardSettleTxHash} ...`)
-      await waitForTransactionReceipt(client, { hash: forwardSettleTxHash })
+      this.logger.info(
+        `waiting for forwardSettleToL2 transaction confirmation of ${forwardSettleTxHash} for order ${order.orderId} ...`,
+      )
+      await waitForTransactionReceipt(l1client, { hash: forwardSettleTxHash })
 
-      this.logger.info(`settlement succesfully forwarded for order ${order.orderId}. tx hash: ${forwardSettleTxHash}`)
+      this.logger.info(
+        `settlement succesfully forwarded to L2 for order ${order.orderId}. tx hash: ${forwardSettleTxHash}`,
+      )
       await this.db.collection("orders").findOneAndUpdate(
         { orderId: order.orderId },
         {
@@ -234,7 +299,7 @@ class SettlementService extends BaseService {
       for (const order of orders) {
         try {
           if (order.resolvedOrder.maxSpent[0].chainId === this.l2EvmChain.id) {
-            await this.settleOrderOnEvmAztec({
+            await this.settleOrderOnAztec({
               orderId: order.orderId,
               resolvedOrder: order.resolvedOrder,
               fillTxHash: order.fillTxHash,
@@ -257,8 +322,10 @@ class SettlementService extends BaseService {
     }
   }
 
-  async settleOrderOnEvmAztec(order: Order) {
+  async settleOrderOnAztec(order: Order) {
     try {
+      this.logger.info(`settling order ${order.orderId} on Aztec ...`)
+      // TODO
     } catch (err) {
       this.logger.error(err)
       throw err
@@ -269,7 +336,7 @@ class SettlementService extends BaseService {
   async settleOrderOnEvmL2(order: Order) {
     const release = await this.settleOrderMutex.acquire()
     try {
-      this.logger.info(`settling order ${order.orderId} ...`)
+      this.logger.info(`settling order ${order.orderId} on L2 ...`)
 
       const l1Client = this.evmMultiClient.getClientByChain(this.l1Chain)
       const l2EvmClient = this.evmMultiClient.getClientByChain(this.l2EvmChain)

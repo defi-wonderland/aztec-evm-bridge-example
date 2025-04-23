@@ -1,4 +1,5 @@
 import { EthAddress } from "@aztec/aztec.js"
+import { optimismSepolia } from "viem/chains"
 
 export const AZTEC_7683_CHAIN_ID = 999999n
 
@@ -19,3 +20,6 @@ export const FORWARDER_CHAIN_ID = 31337
 export const AZTEC_VERSION = 1369311804 // TODO read it from the RollupContract
 
 export const FORWARDER_SETTLE_ORDER_SLOTS = 0n
+export const L2_GATEWAY_FILLED_ORDERS_SLOT = 51n
+
+export const OP_STACK_ANCHOR_REGISTRY_OP_SEPOLIA = "0xDB2727Fc71176Bf8ED630F4142e0439733588e85"

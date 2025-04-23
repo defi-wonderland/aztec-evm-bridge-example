@@ -53,7 +53,7 @@ const main = async () => {
     },
   })
 
-  const orderService = new OrderService({
+  /*const orderService = new OrderService({
     aztecGatewayAddress: AZTEC_GATEWAY_ADDRESS,
     aztecWallet,
     db,
@@ -61,7 +61,7 @@ const main = async () => {
     logger,
     l2EvmChain,
     l2EvmGatewayAddress: L2_EVM_GATEWAY_ADDRESS,
-  })
+  })*/
 
   new SettlementService({
     aztecGatewayAddress: AZTEC_GATEWAY_ADDRESS,
@@ -78,7 +78,7 @@ const main = async () => {
     pxe: await getPxe(),
   })
 
-  const evmWatcher = new EvmWatcher({
+  /*const evmWatcher = new EvmWatcher({
     service: `${l2EvmChain.name.replace(/\s+/g, "")}Watcher`,
     logger,
     client: evmMultiClient.getClientByChain(l2EvmChain),
@@ -107,7 +107,7 @@ const main = async () => {
   })
 
   evmWatcher.start()
-  aztecWatcher.start()
+  aztecWatcher.start()*/
 }
 
 main()
