@@ -9,9 +9,13 @@ interface IL2Gateway7683 is IOriginSettler, IDestinationSettler {
     error InvalidState();
     error invalidOrderType();
 
+    event ForwarderSet(address forwarder);
+
     function settle(
         bytes calldata message,
         StateValidator.StateProofParameters memory stateProofParams,
         StateValidator.AccountProofParameters memory accountProofParams
     ) external;
+
+    function setForwarder(address forwarder) external;
 }

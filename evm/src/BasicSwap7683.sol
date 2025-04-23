@@ -39,6 +39,8 @@ abstract contract BasicSwap7683 is Base7683 {
     bytes32 public constant REFUNDED = "REFUNDED";
 
     // ============ Public Storage ============
+    /// @notice Tracks filled orders commitments.
+    mapping(bytes32 orderId => bytes32 commitment) public filledOrdersCommitments;
 
     // ============ Upgrade Gap ============
     /// @dev Reserved storage slots for upgradeability.
@@ -305,7 +307,7 @@ abstract contract BasicSwap7683 is Base7683 {
      * @param _originData The origin data of the order.
      * Additional data related to the order (unused).
      */
-    function _fillOrder(bytes32 _orderId, bytes calldata _originData, bytes calldata) internal override {
+    function _fillOrder(bytes32 _orderId, bytes calldata _originData, bytes calldata _fillerData) internal override {
         OrderData memory orderData = OrderEncoder.decode(_originData);
 
         if (_orderId != OrderEncoder.id(orderData)) revert InvalidOrderId();
@@ -314,6 +316,12 @@ abstract contract BasicSwap7683 is Base7683 {
 
         address outputToken = TypeCasts.bytes32ToAddress(orderData.outputToken);
         address recipient = TypeCasts.bytes32ToAddress(orderData.recipient);
+
+        // NOTE: Verifying a storage value from `filledOrders` is more complex because the `FilledOrder`
+        // struct contains dynamic types like `bytes`. To simplify proof verification (e.g. using eth_getProof),
+        // we also store a `bytes32` commitment of the struct. This allows us to verify the filled order
+        // by checking a single storage slot.
+        filledOrdersCommitments[_orderId] = keccak256(abi.encodePacked(_originData, _fillerData));
 
         if (outputToken == address(0)) {
             if (orderData.amountOut != msg.value) revert InvalidNativeAmount();
