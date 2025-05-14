@@ -16,3 +16,9 @@
 [submodule "evm/lib/lib-keccak"]
 	path = evm/lib/lib-keccak
 	url = https://github.com/ethereum-optimism/lib-keccak
+[submodule "example/vault/lib/forge-std"]
+	path = example/vault/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
+[submodule "example/vault/lib/openzeppelin-contracts"]
+	path = example/vault/lib/openzeppelin-contracts
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts
