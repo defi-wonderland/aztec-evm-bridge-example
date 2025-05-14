@@ -156,9 +156,10 @@ class OrderService extends BaseService {
       const orderStatus = ORDER_STATUS_FILLED
 
       this.logger.info(`approving l2EvmGateway to spend ${maxSpentAmount} tokens ...`)
+      // @ts-ignore
       let txHash = await l2EvmClient.writeContract({
         abi: erc20Abi,
-        account: l2EvmClient.account.address,
+        //account: l2EvmClient.account.address,
         address: maxSpentToken,
         args: [this.l2EvmGatewayAddress, maxSpentAmount],
         chain: this.l2EvmChain,
@@ -168,9 +169,10 @@ class OrderService extends BaseService {
       this.logger.info(`tokens approved. ${this.l2EvmChain.name}:${txHash}. filling the order ...`)
 
       const fillerData = this.aztecWallet.getAddress().toString()
+      // @ts-ignore
       txHash = await l2EvmClient.writeContract({
         abi: l2Gateway7683Abi,
-        account: l2EvmClient.account.address,
+        // account: l2EvmClient.account.address,
         address: this.l2EvmGatewayAddress,
         args: [orderId, originData, fillerData],
         chain: this.l2EvmChain,

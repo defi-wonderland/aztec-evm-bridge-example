@@ -3,8 +3,6 @@ import { privateKeyToAccount } from "viem/accounts"
 
 import type {
   Chain,
-  WalletClient,
-  PublicClient,
   Client as Client_Base,
   Transport,
   EIP1474Methods,
@@ -27,7 +25,7 @@ class MultiClient {
   constructor({ chains, privateKey, rpcUrls }: ContructorConfigs) {
     this.clients = chains.reduce((acc: { [chainName: string]: any }, chain: Chain) => {
       const rpcUrl = rpcUrls[chain.id] as string
-      acc[chain.id] = createClient({
+      acc[chain.id] = createWalletClient({
         key: rpcUrl,
         account: privateKeyToAccount(privateKey),
         chain,
