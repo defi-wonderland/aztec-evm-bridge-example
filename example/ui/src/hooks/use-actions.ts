@@ -23,9 +23,9 @@ import {
   INITIATED_PRIVATELY,
 } from "../settings/constants"
 import { getZkPassportProof } from "../utils/zkpassport"
+import { randomUint64 } from "../utils/random"
 
 import type { Asset } from "../types"
-import { randomUint64 } from "../utils/random"
 
 const useActions = () => {
   const { refresh: refreshBalances } = useAssets()
