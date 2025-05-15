@@ -43,6 +43,7 @@ contract Vault is IHook7683Recipient {
 
     function withdraw(OnchainCrossChainOrder calldata order) external {
         OrderData memory orderData = OrderEncoder.decode(order.orderData);
+        require(_bytes32ToAddress(orderData.sender) == address(this), "invalid sender");
         address token = _bytes32ToAddress(orderData.inputToken);
         uint256 amount = orderData.amountIn;
         require(amounts[token][msg.sender] - amount > 0, "insufficent balance");
