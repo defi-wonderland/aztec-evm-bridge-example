@@ -32,6 +32,7 @@ const useActions = () => {
   const { data: walletClient /*refetch: refetchWalletClient*/ } = useWalletClient()
   const [depositInProgress, setDepositInProgress] = useState<string | null>(null)
   const [withdrawInProgress, setWithdrawInProgress] = useState<string | null>(null)
+  const [isGeneratingProof, setIsGeneratingProof] = useState<boolean>(false)
 
   const deposit = useCallback(
     async ({
@@ -50,10 +51,12 @@ const useActions = () => {
 
         const [proofParams] = await getZkPassportProof({
           onGeneratingProof: () => {
+            setIsGeneratingProof(true)
             console.log("generating proof ...")
           },
           onProofGenerated: () => {
             console.log("proof generated")
+            setIsGeneratingProof(false)
             setUrl(null)
           },
           onRequestReceived: () => {
@@ -178,6 +181,8 @@ const useActions = () => {
         console.error(err)
       } finally {
         setDepositInProgress(null)
+        setIsGeneratingProof(false)
+        setUrl(null)
       }
     },
     [walletClient, refreshBalances],
@@ -311,6 +316,7 @@ const useActions = () => {
   return {
     deposit,
     depositInProgress,
+    isGeneratingProof,
     withdraw,
     withdrawInProgress,
   }

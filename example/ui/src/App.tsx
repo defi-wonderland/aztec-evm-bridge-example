@@ -21,7 +21,7 @@ const App = () => {
   const [amount, setAmount] = useState("")
   const [url, setUrl] = useState<string | null>(null)
 
-  const { deposit, depositInProgress, withdraw, withdrawInProgress } = useActions()
+  const { deposit, depositInProgress, isGeneratingProof, withdraw, withdrawInProgress } = useActions()
   const { assets } = useAssets()
   const { isConnected } = useAccount()
   const { openConnectModal } = useConnectModal()
@@ -222,21 +222,26 @@ const App = () => {
                         <X size={20} />
                       </button>
 
-                      <QRCode value={url || ""} size={240} bgColor="transparent" fgColor="black" className="mt-4" />
-
-                      <p className="mt-6 text-md text-gray-600 leading-relaxed max-w-xs">
-                        Scan this QR code to open the <span className="text-black font-semibold">zkPassport</span> app
-                        on your phone, or click{" "}
-                        <a
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 underline font-semibold"
-                        >
-                          here
-                        </a>{" "}
-                        instead.
-                      </p>
+                      {isGeneratingProof ? (
+                        <Spinner size="lg" text="Collecting your anonymized deposit material ..." color="gray-600" />
+                      ) : (
+                        <>
+                          <QRCode value={url || ""} size={240} bgColor="transparent" fgColor="black" className="mt-4" />
+                          <p className="mt-6 text-md text-gray-600 leading-relaxed max-w-xs">
+                            Scan this QR code to open the <span className="text-black font-semibold">zkPassport</span>{" "}
+                            app on your phone, or click{" "}
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 underline font-semibold"
+                            >
+                              here
+                            </a>{" "}
+                            instead.
+                          </p>
+                        </>
+                      )}
                     </motion.div>
                   </motion.div>
                 )}
