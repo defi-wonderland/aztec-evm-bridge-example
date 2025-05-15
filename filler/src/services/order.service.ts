@@ -247,7 +247,7 @@ class OrderService extends BaseService {
         AztecGateway7683Contract.at(AztecAddress.fromString(this.aztecGatewayAddress), this.aztecWallet),
       ])
 
-      this.logger.info(`setting public auth with to fill the order ${orderId} ...`)
+      this.logger.info(`setting public authwit to fill the order ${orderId} ...`)
       // @ts-ignore
       const res = await this.aztecWallet.setPublicAuthWit(
         {

@@ -106,7 +106,7 @@ const main = async () => {
     },
   })
 
-  //evmWatcher.start()
+  evmWatcher.start()
   aztecWatcher.start()
 }
 

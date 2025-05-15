@@ -168,10 +168,15 @@ class SettlementService extends BaseService {
         accountProof: proof.accountProof,
         storageProof: proof.storageProof[0]!.proof,
       }
+      if (accountProofParameters.storageProof.length === 0) {
+        this.logger.info(`anchor root not updated yet. skipping for now ...`)
+        return
+      }
 
+      // @ts-ignore
       const forwardSettleTxHash = await l1client.writeContract({
         abi: forwarderAbi,
-        account: l1client.account.address,
+        // account: l1client.account.address,
         address: this.forwarderAddress,
         args: [
           order.orderId,
@@ -242,9 +247,10 @@ class SettlementService extends BaseService {
       )
 
       const l1client = this.evmMultiClient.getClientByChain(this.l1Chain)
+      // @ts-ignore
       const forwardSettleTxHash = await l1client.writeContract({
         abi: forwarderAbi,
-        account: l1client.account.address,
+        // account: l1client.account.address,
         address: this.forwarderAddress,
         args: [
           [
@@ -387,8 +393,9 @@ class SettlementService extends BaseService {
         return
       }
 
+      // @ts-ignore
       const settleTxHash = await l2EvmClient.writeContract({
-        account: l2EvmClient.account.address,
+        // account: l2EvmClient.account.address,
         address: this.l2EvmGatewayAddress,
         chain: this.l2EvmChain,
         functionName: "settle",
