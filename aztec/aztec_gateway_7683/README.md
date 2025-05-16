@@ -31,7 +31,7 @@ Before running the above command make sure to run the following commands:
 
 ```bash
 # Navigate to the Aztec monorepo
-cd ~/nargo/github.com/AztecProtocol/aztec-packages/v0.85.0/noir-projects/noir-contracts/
+cd ~/nargo/github.com/AztecProtocol/aztec-packages/v0.86.0/noir-projects/noir-contracts/
 
 # Compile the token_contract package
 aztec-nargo compile --package token_contract
