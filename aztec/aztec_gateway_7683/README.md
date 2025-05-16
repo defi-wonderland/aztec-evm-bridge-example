@@ -39,7 +39,7 @@ aztec-nargo compile --package token_contract
 # Return to the root of the project directory
 
 # Copy the compiled artifact back to your project
-cp ~/nargo/github.com/AztecProtocol/aztec-packages/v0.85.0/noir-projects/noir-contracts/target/token_contract-Token.json ./target/token_contract-Token.json
+cp ~/nargo/github.com/AztecProtocol/aztec-packages/v0.86.0/noir-projects/noir-contracts/target/token_contract-Token.json ./target/token_contract-Token.json
 ```
 
 If you see the following error when compiling:
