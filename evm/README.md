@@ -1,19 +1,6 @@
-## Foundry
+# evm
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
-
-Foundry consists of:
-
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
-
-## Documentation
-
-https://book.getfoundry.sh/
-
-## Usage
+## 🚀 Getting Started
 
 ### Build
 
@@ -21,46 +8,22 @@ https://book.getfoundry.sh/
 $ forge build
 ```
 
-### Test
-
-```shell
-$ forge test
-```
-
-### Format
-
-```shell
-$ forge fmt
-```
-
-### Gas Snapshots
-
-```shell
-$ forge snapshot
-```
-
-### Anvil
-
-```shell
-$ anvil
-```
-
 ### Deploy
 
 ```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
+forge create --broadcast \
+  --private-key <private_key> \
+  --rpc-url <rpc_url> \
+  src/L2Gateway7683.sol:L2Gateway7683 \
+  --constructor-args <permit2_address>
 ```
 
-### Cast
 
 ```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
+forge create  --broadcast \
+  --private-key <private_key> \
+  --rpc-url <rpc_url> \
+  src/Forwarder.sol:Forwarder \
+  --constructor-args <l2_gateway_7683> <aztec_inbox> <aztec_outbox> <aztec_gateway> <anchor_state_registry>
+ 
 ```
