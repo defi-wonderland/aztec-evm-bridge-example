@@ -1,19 +1,10 @@
-## Foundry
+# Vault
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+The Vault is a smart contract deployed on Optimism Sepolia that securely receives confidential asset deposits from Aztec via the ERC-7683 bridge. 
+Before accepting a deposit, the Vault verifies a zkPassport proof to ensure the user meets specific eligibility criteria—such as being over 18 years old without revealing any personal data. Only users who successfully provide a valid zero-knowledge proof are allowed to interact with the Vault.
+In addition to private deposits, the Vault also supports withdrawals, allowing eligible users to retrieve their funds securely and trustlessly.
 
-Foundry consists of:
-
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
-
-## Documentation
-
-https://book.getfoundry.sh/
-
-## Usage
+## 🚀 Getting Started
 
 ### Build
 
@@ -21,46 +12,12 @@ https://book.getfoundry.sh/
 $ forge build
 ```
 
-### Test
-
-```shell
-$ forge test
-```
-
-### Format
-
-```shell
-$ forge fmt
-```
-
-### Gas Snapshots
-
-```shell
-$ forge snapshot
-```
-
-### Anvil
-
-```shell
-$ anvil
-```
-
 ### Deploy
 
 ```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
+forge create --broadcast \
+    --private-key <your_private_key> \
+    --rpc-url <optimism_sepolia_rpc> \
+    src/Vault.sol:Vault \
+    --constructor-args <l2_gateway_7683>
 ```
