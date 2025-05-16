@@ -12,9 +12,9 @@
   "license": "MIT",
   "description": "",
   "dependencies": {
-    "@aztec/accounts": "0.85.0",
-    "@aztec/aztec.js": "0.85.0",
-    "@aztec/noir-contracts.js": "0.85.0",
+    "@aztec/accounts": "0.86.0",
+    "@aztec/aztec.js": "0.86.0",
+    "@aztec/noir-contracts.js": "0.86.0",
     "@chainsafe/persistent-merkle-tree": "^1.1.0",
     "@chainsafe/ssz": "^1.2.0",
     "@lodestar/types": "^1.27.1",

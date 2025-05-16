@@ -11,7 +11,7 @@ import {
 } from "@aztec/aztec.js"
 import { getInitialTestAccountsWallets } from "@aztec/accounts/testing"
 import { spawn } from "child_process"
-import { createEthereumChain, createL1Clients, RollupContract } from "@aztec/ethereum"
+import { createEthereumChain, createExtendedL1Client, RollupContract } from "@aztec/ethereum"
 import { encodePacked, hexToBytes, padHex, sha256 } from "viem"
 import { sha256ToField } from "@aztec/foundation/crypto"
 import { computePartialAddress } from "@aztec/stdlib/contract"
@@ -114,8 +114,7 @@ describe("AztecGateway7683", () => {
     const nodeInfo = await pxe.getNodeInfo()
     const chain = createEthereumChain(["http://localhost:8545"], nodeInfo.l1ChainId)
 
-    const clients = createL1Clients(chain.rpcUrls, MNEMONIC, chain.chainInfo)
-    publicClient = clients.publicClient
+    publicClient = createExtendedL1Client(chain.rpcUrls, MNEMONIC, chain.chainInfo)
 
     const l1Contracts = (await pxe.getNodeInfo()).l1ContractAddresses
     const rollup = new RollupContract(publicClient, l1Contracts.rollupAddress)
@@ -287,13 +286,11 @@ describe("AztecGateway7683", () => {
     let fromBlock = await pxe.getBlockNumber()
     const receipt = await gateway
       .withWallet(user)
-      .methods.open_private(
-        {
-          fill_deadline: FILL_DEADLINE,
-          order_data: Array.from(hexToBytes(orderData)),
-          order_data_type: Array.from(hexToBytes(ORDER_DATA_TYPE)),
-        },
-      )
+      .methods.open_private({
+        fill_deadline: FILL_DEADLINE,
+        order_data: Array.from(hexToBytes(orderData)),
+        order_data_type: Array.from(hexToBytes(ORDER_DATA_TYPE)),
+      })
       .with({
         authWitnesses: [witness],
       })

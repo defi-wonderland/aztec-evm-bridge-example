@@ -1,8 +1,8 @@
 import { getDeployedTestAccountsWallets } from "@aztec/accounts/testing"
-import { createAztecNodeClient, createPXEClient, AztecAddress, waitForPXE } from "@aztec/aztec.js"
+import { createAztecNodeClient, createPXEClient, AztecAddress, waitForPXE, getWallet } from "@aztec/aztec.js"
 
 import type { AztecNode, ContractInstanceWithAddress, Fr, PXE, Wallet } from "@aztec/aztec.js"
-import type { Order, ResolvedOrder } from "../types"
+import type { ResolvedOrder } from "../types"
 
 export const getAztecWallet = async (): Promise<Wallet> => {
   const pxe = await getPxe()

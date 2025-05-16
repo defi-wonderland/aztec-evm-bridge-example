@@ -24,7 +24,7 @@ export default {
       // aztec-wallet register-contract --from accounts:test0  contracts:wethtoken TokenContractArtifact
       // aztec-wallet send mint_to_public --from accounts:test0 --contract-address contracts:wethtoken --args accounts:test0 100000000000000000000000
       // aztec-wallet send mint_to_private --from accounts:test0 --contract-address contracts:wethtoken --args accounts:test0 accounts:test0 100000000000000000000000000000000
-      sourceAddress: "0x2c2e040f3646a41bee281b9c11d9167a0052f70df2f60feab1fea0be265f5371",
+      sourceAddress: "0x14dc46157539075e868e767612419de798360399fa7e11984dfb7ec8d3d70c99",
       sourceChain: {
         name: "Aztec",
         id: AZTEC_7683_CHAIN_ID,
