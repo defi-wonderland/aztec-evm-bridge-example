@@ -45,6 +45,7 @@ pub contract AztecGateway7683 {
         prelude::{AztecAddress, EthAddress, Map, PublicImmutable, PublicMutable},
         protocol_types::{hash::sha256_to_field, traits::{Packable, Serialize}},
     };
+    use dep::uint_note::uint_note::PartialUintNote;
     use token::Token;
 
     #[storage]
@@ -169,9 +170,14 @@ pub contract AztecGateway7683 {
         assert(sha256::digest(secret) == order_data.recipient, "Invalid secret");
 
         // transfer from gateway public balance to user private balance
-        Token::at(u8_32_to_aztec_address(order_data.output_token))
-            .transfer_to_private(context.msg_sender(), u8_32_to_u128(order_data.amount_out))
-            .call(&mut context);
+        let token = u8_32_to_aztec_address(order_data.output_token);
+        let partial_note = Token::at(token)
+            .prepare_private_balance_increase(context.msg_sender(), context.msg_sender())
+            .call(&mut context); // assumes msg.sender in the gateway _is_ an account contract
+
+        AztecGateway7683::at(context.this_address())
+            ._finalize_claim_private(token, u8_32_to_u128(order_data.amount_out), partial_note)
+            .enqueue(&mut context);
 
         AztecGateway7683::at(context.this_address())._update_order_status(order_id, FILLED).enqueue(
             &mut context,
@@ -474,6 +480,12 @@ pub contract AztecGateway7683 {
     #[internal]
     fn _emit_settled(order_id_bytes: [u8; 32], receiver: [u8; 32]) {
         context.emit_public_log(Settled { order_id: order_id_bytes, receiver }.pack());
+    }
+
+    #[public]
+    #[internal]
+    fn _finalize_claim_private(token: AztecAddress, amount: u128, partial_note: PartialUintNote) {
+        Token::at(token).finalize_transfer_to_private(amount, partial_note);
     }
 
     #[public]
