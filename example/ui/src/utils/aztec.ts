@@ -22,6 +22,7 @@ export interface RegisterContractParams {
 export const registerAztecContracts = async () => {
   console.log("registering aztec contracts ...")
   const wallet = await getAztecWallet()
+  const pxe = await getPxe()
   await Promise.all([
     ...settings.assets.map(({ sourceAddress }) => {
       return registerContract(AztecAddress.fromString(sourceAddress), {
@@ -33,6 +34,7 @@ export const registerAztecContracts = async () => {
       wallet,
       artifact: AztecGateway7683ContractArtifact,
     }),
+    pxe.registerSender(AztecAddress.fromString(settings.contractAddresses[AZTEC_7683_CHAIN_ID].gateway))
   ])
 }
 
