@@ -115,7 +115,7 @@ export class AztecGateway7683Contract extends ContractBase {
   }
   
 
-  public static get storage(): ContractStorageLayout<'config' | 'claimable_orders' | 'open_orders' | 'order_status' | 'used_nonces' | 'filled_orders_block_numbers'> {
+  public static get storage(): ContractStorageLayout<'config' | 'claimable_orders' | 'open_orders' | 'order_status' | 'used_nonces' | 'orders_settlement_block_numbers'> {
       return {
         config: {
       slot: new Fr(1n),
@@ -132,10 +132,10 @@ order_status: {
 used_nonces: {
       slot: new Fr(6n),
     },
-filled_orders_block_numbers: {
+orders_settlement_block_numbers: {
       slot: new Fr(7n),
     }
-      } as ContractStorageLayout<'config' | 'claimable_orders' | 'open_orders' | 'order_status' | 'used_nonces' | 'filled_orders_block_numbers'>;
+      } as ContractStorageLayout<'config' | 'claimable_orders' | 'open_orders' | 'order_status' | 'used_nonces' | 'orders_settlement_block_numbers'>;
     }
     
 
@@ -163,8 +163,8 @@ filled_orders_block_numbers: {
     /** fill_private(order_id_bytes: array, origin_data_bytes: array, filler_data_bytes: array) */
     fill_private: ((order_id_bytes: (bigint | number)[], origin_data_bytes: (bigint | number)[], filler_data_bytes: (bigint | number)[]) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
 
-    /** get_filled_order_block_number(order_id_bytes: array) */
-    get_filled_order_block_number: ((order_id_bytes: (bigint | number)[]) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
+    /** get_order_settlement_block_number(order_id_bytes: array) */
+    get_order_settlement_block_number: ((order_id_bytes: (bigint | number)[]) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
 
     /** get_order_status(order_id_bytes: array) */
     get_order_status: ((order_id_bytes: (bigint | number)[]) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;

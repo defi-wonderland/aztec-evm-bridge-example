@@ -49,7 +49,7 @@ const setupSandbox = async () => {
   return pxe
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+// const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const setup = async ({ admin, pxe, receiver }: { admin: AccountWallet; pxe: PXE; receiver: AccountWallet }) => {
   const gatewaySecretKey = Fr.random()
@@ -444,12 +444,12 @@ describe("AztecGateway7683", () => {
       content.toBuffer(),
     ])
 
-    const filledOrderBlockNumber = await gateway.methods
-      .get_filled_order_block_number(Array.from(hexToBytes(orderId)))
+    const orderSettlementBlockNumber = await gateway.methods
+      .get_order_settlement_block_number(Array.from(hexToBytes(orderId)))
       .simulate()
 
     const [l2ToL1MessageIndex, siblingPath] = await pxe.getL2ToL1MembershipWitness(
-      parseInt(filledOrderBlockNumber),
+      parseInt(orderSettlementBlockNumber),
       l2ToL1Message,
     )
 
@@ -559,12 +559,12 @@ describe("AztecGateway7683", () => {
       content.toBuffer(),
     ])
 
-    const filledOrderBlockNumber = await gateway.methods
-      .get_filled_order_block_number(Array.from(hexToBytes(orderId)))
+    const orderSettlementBlockNumber = await gateway.methods
+      .get_order_settlement_block_number(Array.from(hexToBytes(orderId)))
       .simulate()
 
     const [l2ToL1MessageIndex, siblingPath] = await pxe.getL2ToL1MembershipWitness(
-      parseInt(filledOrderBlockNumber),
+      parseInt(orderSettlementBlockNumber),
       l2ToL1Message,
     )
 

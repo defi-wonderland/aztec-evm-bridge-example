@@ -55,7 +55,7 @@ pub contract AztecGateway7683 {
         open_orders: Map<Field, PublicMutable<[u8; 32], Context>, Context>,
         order_status: Map<Field, PublicMutable<u32, Context>, Context>,
         used_nonces: Map<AztecAddress, Map<Field, PublicMutable<bool, Context>, Context>, Context>,
-        filled_orders_block_numbers: Map<Field, PublicMutable<Field, Context>, Context>,
+        orders_settlement_block_numbers: Map<Field, PublicMutable<Field, Context>, Context>,
     }
 
     #[public]
@@ -304,8 +304,8 @@ pub contract AztecGateway7683 {
 
     #[public]
     #[view]
-    fn get_filled_order_block_number(order_id_bytes: [u8; 32]) -> Field {
-        storage.filled_orders_block_numbers.at(Field::from_be_bytes(order_id_bytes)).read()
+    fn get_order_settlement_block_number(order_id_bytes: [u8; 32]) -> Field {
+        storage.orders_settlement_block_numbers.at(Field::from_be_bytes(order_id_bytes)).read()
     }
 
     #[public]
@@ -491,7 +491,7 @@ pub contract AztecGateway7683 {
     #[public]
     #[internal]
     fn _trigger_settlement(order_id: Field, order_id_bytes: [u8; 32], filler_data: [u8; 32]) {
-        storage.filled_orders_block_numbers.at(order_id).write(context.block_number());
+        storage.orders_settlement_block_numbers.at(order_id).write(context.block_number());
 
         let mut settlement_message_bytes: [u8; 96] = [0; 96];
 
