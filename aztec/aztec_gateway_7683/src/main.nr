@@ -136,9 +136,15 @@ pub contract AztecGateway7683 {
 
         for i in 0..resolved_order.min_received.len() {
             let min_received = resolved_order.min_received[i];
-            let amount = u8_32_to_u128(min_received.amount);
+
+            // transfer from user private balance to gateway public balance
             Token::at(u8_32_to_aztec_address(min_received.token))
-                .transfer_in_private(context.msg_sender(), context.this_address(), amount, nonce)
+                .transfer_to_public(
+                    context.msg_sender(),
+                    context.this_address(),
+                    u8_32_to_u128(min_received.amount),
+                    nonce,
+                )
                 .call(&mut context);
         }
 
@@ -391,14 +397,14 @@ pub contract AztecGateway7683 {
             message_leaf_index,
         );*/
 
-        Token::at(u8_32_to_aztec_address(order_data.input_token))
-            .transfer_in_private(
-                context.this_address(),
-                u8_32_to_aztec_address(filler_data_bytes),
-                u8_32_to_u128(order_data.amount_in),
-                0,
-            )
-            .call(&mut context);
+        let filler = u8_32_to_aztec_address(filler_data_bytes);
+        let token = u8_32_to_aztec_address(order_data.input_token);
+        let partial_note =
+            Token::at(token).prepare_private_balance_increase(filler, filler).call(&mut context); // assumes msg.sender in the gateway _is_ an account contract
+
+        Token::at(token)
+            .finalize_transfer_to_private(u8_32_to_u128(order_data.amount_in), partial_note)
+            .enqueue(&mut context);
 
         AztecGateway7683::at(context.this_address())
             ._update_order_status(order_id, SETTLED)
@@ -485,7 +491,7 @@ pub contract AztecGateway7683 {
     #[public]
     #[internal]
     fn _finalize_claim_private(token: AztecAddress, amount: u128, partial_note: PartialUintNote) {
-        Token::at(token).finalize_transfer_to_private(amount, partial_note);
+        Token::at(token).finalize_transfer_to_private(amount, partial_note).call(&mut context);
     }
 
     #[public]
