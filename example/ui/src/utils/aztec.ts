@@ -34,7 +34,7 @@ export const registerAztecContracts = async () => {
       wallet,
       artifact: AztecGateway7683ContractArtifact,
     }),
-    pxe.registerSender(AztecAddress.fromString(settings.contractAddresses[AZTEC_7683_CHAIN_ID].gateway))
+    pxe.registerSender(AztecAddress.fromString(settings.contractAddresses[AZTEC_7683_CHAIN_ID].gateway)),
   ])
 }
 

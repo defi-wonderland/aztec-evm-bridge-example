@@ -89,7 +89,7 @@ const useActions = () => {
         const nonce = Fr.random()
         const witness = await aztecWallet.createAuthWit({
           caller: gatewayAddress,
-          action: token.methods.transfer_in_private(
+          action: token.methods.transfer_to_public(
             aztecWallet.getAddress(),
             gatewayAddress,
             onChainSourceAssetAmount,
