@@ -1,10 +1,4 @@
-import {
-  AztecAddress,
-  Contract,
-  EthAddress,
-  Fr,
-  SponsoredFeePaymentMethod,
-} from "@aztec/aztec.js"
+import { AztecAddress, Contract, EthAddress, Fr, SponsoredFeePaymentMethod } from "@aztec/aztec.js"
 import { SponsoredFPCContract } from "@aztec/noir-contracts.js/SponsoredFPC"
 import { TokenContract, TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
 
