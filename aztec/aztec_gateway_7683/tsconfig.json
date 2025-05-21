@@ -21,5 +21,10 @@
     "skipLibCheck": true,
     "jsx": "react-jsx"
   },
+  "ts-node": {
+    "experimentalSpecifierResolution": "node",
+    "transpileOnly": true,
+    "esm": true,
+  },
   "include": ["src", "scripts/**/*", "src/**/*.json", "src/artifacts/*", "target/**/*", "target/aztec_gateway_7683-AztecGateway7683.json", "target/token_contract-Token.json"]
 }

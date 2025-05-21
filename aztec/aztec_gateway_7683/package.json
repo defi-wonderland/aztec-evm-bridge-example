@@ -36,6 +36,9 @@
     "ts-node": "^10.9.2",
     "typescript": "^5.4.4"
   },
+  "resolutions": {
+    "jackspeak": "2.1.1"
+  },
   "jest": {
     "testTimeout": 200000
   },
