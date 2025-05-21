@@ -91,6 +91,11 @@ const setup = async (pxes: PXE[]) => {
     .wait()
   await token
     .withWallet(deployer)
+    .methods.mint_to_private(deployer.getAddress(), filler.getAddress(), amount)
+    .send({ fee: { paymentMethod } })
+    .wait()
+  await token
+    .withWallet(deployer)
     .methods.mint_to_public(user.getAddress(), amount)
     .send({ fee: { paymentMethod } })
     .wait()
@@ -401,7 +406,7 @@ describe("AztecGateway7683", () => {
     )
 
     const orderId = sha256(originData)
-    const fillerData = padHex("0x00") // keep it 0 for now
+    const fillerData = filler.getAddress().toString()
     await (
       await filler.setPublicAuthWit(
         {
@@ -413,9 +418,7 @@ describe("AztecGateway7683", () => {
         true,
       )
     )
-      .send({
-        fee: { paymentMethod },
-      })
+      .send({ fee: { paymentMethod } })
       .wait()
 
     const fromBlock = await pxe1.getBlockNumber()
@@ -444,7 +447,7 @@ describe("AztecGateway7683", () => {
     const content = sha256ToField([
       Buffer.from(SETTLE_ORDER_TYPE.slice(2), "hex"),
       Buffer.from(orderId.slice(2), "hex"),
-      Buffer.alloc(32, 0),
+      Buffer.from(filler.getAddress().toString().slice(2), "hex"),
     ])
 
     const l2ToL1Message = sha256ToField([
@@ -471,7 +474,7 @@ describe("AztecGateway7683", () => {
   it("should fill a private order and send the settlement message to the forwarder via portal", async () => {
     const [pxe1] = pxes
     const { token, gateway, wallets, paymentMethod } = await setup(pxes)
-    const [user, filler, deployer] = wallets
+    const [user, filler] = wallets
 
     const amountOut = 100n
     const nonce = Fr.random()
@@ -511,19 +514,12 @@ describe("AztecGateway7683", () => {
     const orderId = sha256(originData)
     const fillerData = filler.getAddress().toString()
 
-    await (
-      await filler.setPublicAuthWit(
-        {
-          caller: gateway.address,
-          action: token
-            .withWallet(filler)
-            .methods.transfer_in_public(filler.getAddress(), gateway.address, amountOut, 0),
-        },
-        true,
-      )
-    )
-      .send({ fee: { paymentMethod } })
-      .wait()
+    const witness = await filler.createAuthWit({
+      caller: gateway.address,
+      action: token
+        .withWallet(filler)
+        .methods.transfer_to_public(filler.getAddress(), gateway.address, amountOut, nonce),
+    })
 
     const fromBlock = await pxe1.getBlockNumber()
     await gateway
@@ -533,6 +529,9 @@ describe("AztecGateway7683", () => {
         Array.from(hexToBytes(originData)),
         Array.from(hexToBytes(fillerData)),
       )
+      .with({
+        authWitnesses: [witness],
+      })
       .send({
         fee: { paymentMethod },
       })
