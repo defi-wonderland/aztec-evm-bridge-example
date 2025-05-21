@@ -20,7 +20,7 @@ import {
   PRIVATE_ORDER,
   PRIVATE_SENDER,
   PRIVATE_ORDER_WITH_HOOK,
-  INITIATED_PRIVATELY,
+  FILLED_PRIVATELY,
 } from "../settings/constants"
 import { getZkPassportProof } from "../utils/zkpassport"
 import { randomUint64 } from "../utils/random"
@@ -265,7 +265,7 @@ const useActions = () => {
         while (true) {
           const status = await aztecGateway.methods.get_order_status(orderIdBytes).simulate()
           console.log("order status:", status)
-          if (parseInt(status) === INITIATED_PRIVATELY) {
+          if (parseInt(status) === FILLED_PRIVATELY) {
             let log
             while (true) {
               try {
