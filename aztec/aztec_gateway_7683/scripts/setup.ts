@@ -39,14 +39,14 @@ async function main(): Promise<void> {
     })
     .deployed()
 
-  const token = await Contract.deploy(deployer, TokenContractArtifact, [deployer.getAddress(), "TOKEN", "TKN", 18])
+  const token = await Contract.deploy(deployer, TokenContractArtifact, [
+    deployer.getAddress(),
+    "Wrapped Ethereum",
+    "WETH",
+    18,
+  ])
     .send({ fee: { paymentMethod } })
     .deployed()
-  const tokenDeployer = await Contract.at(
-    AztecAddress.fromString(token.address.toString()),
-    TokenContractArtifact,
-    deployer,
-  )
 
   // user and filler must know token and gateway
   for (const pxe of [pxe1, pxe2]) {
@@ -61,12 +61,31 @@ async function main(): Promise<void> {
   }
 
   const amount = 1000n * 10n ** 18n
-  await tokenDeployer.methods
-    .mint_to_private(deployer.getAddress(), user.getAddress(), amount)
+  await token
+    .withWallet(deployer)
+    .methods.mint_to_private(deployer.getAddress(), user.getAddress(), amount)
     .send({ fee: { paymentMethod } })
     .wait()
-  await tokenDeployer.methods.mint_to_public(user.getAddress(), amount).send({ fee: { paymentMethod } }).wait()
-  await tokenDeployer.methods.mint_to_public(filler.getAddress(), amount).send({ fee: { paymentMethod } }).wait()
+  await token
+    .withWallet(deployer)
+    .methods.mint_to_private(deployer.getAddress(), filler.getAddress(), amount)
+    .send({ fee: { paymentMethod } })
+    .wait()
+  await token
+    .withWallet(deployer)
+    .methods.mint_to_public(user.getAddress(), amount)
+    .send({ fee: { paymentMethod } })
+    .wait()
+  await token
+    .withWallet(deployer)
+    .methods.mint_to_public(filler.getAddress(), amount)
+    .send({ fee: { paymentMethod } })
+    .wait()
+
+  console.log({
+    gateway: gateway.address.toString(),
+    token: token.address.toString()
+  })
 }
 
 main().catch((err) => {
