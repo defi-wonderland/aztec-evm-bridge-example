@@ -7,6 +7,8 @@ import { getPXEs, getWallet } from "./utils.js"
 import { AztecGateway7683Contract, AztecGateway7683ContractArtifact } from "../src/artifacts/AztecGateway7683.js"
 
 const PORTAL_ADDRESS = EthAddress.ZERO
+const L2_CHAIN_ID = 11155420
+const DESTINATION_SETTLER_EVM_L2 = EthAddress.ZERO
 
 async function main(): Promise<void> {
   const pxes = await getPXEs(["pxe1", "pxe2", "pxe3"])
@@ -28,7 +30,12 @@ async function main(): Promise<void> {
   await user.registerSender(deployer.getAddress())
   await filler.registerSender(deployer.getAddress())
 
-  const gateway = await AztecGateway7683Contract.deploy(deployer, PORTAL_ADDRESS)
+  const gateway = await AztecGateway7683Contract.deploy(
+    deployer,
+    DESTINATION_SETTLER_EVM_L2,
+    L2_CHAIN_ID,
+    PORTAL_ADDRESS,
+  )
     .send({
       contractAddressSalt: Fr.random(),
       universalDeploy: false,
@@ -84,7 +91,7 @@ async function main(): Promise<void> {
 
   console.log({
     gateway: gateway.address.toString(),
-    token: token.address.toString()
+    token: token.address.toString(),
   })
 }
 

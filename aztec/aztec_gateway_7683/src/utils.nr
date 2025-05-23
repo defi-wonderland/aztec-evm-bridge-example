@@ -1,4 +1,4 @@
-use dep::aztec::{prelude::AztecAddress, protocol_types::traits::FromField};
+use dep::aztec::{prelude::{AztecAddress, EthAddress}, protocol_types::traits::FromField};
 
 pub(crate) fn u8_32_to_u128(input: [u8; 32]) -> u128 {
     let mut result = 0;
@@ -16,6 +16,10 @@ pub(crate) fn u8_4_to_u32(bytes: [u8; 4]) -> u32 {
 
 pub(crate) fn u8_32_to_aztec_address(bytes: [u8; 32]) -> AztecAddress {
     AztecAddress::from_field(Field::from_be_bytes(bytes))
+}
+
+pub(crate) fn u8_32_to_eth_address(bytes: [u8; 32]) -> EthAddress {
+    EthAddress::from_field(Field::from_be_bytes(bytes))
 }
 
 pub(crate) fn u32_to_u8_4(x: u32) -> [u8; 4] {

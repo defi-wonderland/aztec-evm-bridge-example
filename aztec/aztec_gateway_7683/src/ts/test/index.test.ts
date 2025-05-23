@@ -27,9 +27,10 @@ const TOKEN_IN = "0x222222222222222222222222222222222222222222222222222222222222
 const TOKEN_OUT = "0x3333333333333333333333333333333333333333333333333333333333333333"
 const AMOUNT_OUT_ZERO = 0n
 const AMOUNT_IN_ZERO = 0n
-const MAINNET_CHAIN_ID = 1
+// const MAINNET_CHAIN_ID = 1
+const L2_CHAIN_ID = 11155420
 const FILL_DEADLINE = 2 ** 32 - 1
-const DESTINATION_SETTLER = "0x4444444444444444444444444444444444444444444444444444444444444444"
+const DESTINATION_SETTLER_EVM_L2 = EthAddress.ZERO
 const DATA = "0x5555555555555555555555555555555555555555555555555555555555555555"
 
 // const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -53,7 +54,12 @@ const setup = async (pxes: PXE[]) => {
   await user.registerSender(deployer.getAddress())
   await filler.registerSender(deployer.getAddress())
 
-  const gateway = await AztecGateway7683Contract.deploy(deployer, PORTAL_ADDRESS)
+  const gateway = await AztecGateway7683Contract.deploy(
+    deployer,
+    DESTINATION_SETTLER_EVM_L2,
+    L2_CHAIN_ID,
+    PORTAL_ADDRESS,
+  )
     .send({
       contractAddressSalt: Fr.random(),
       universalDeploy: false,
@@ -190,8 +196,8 @@ describe("AztecGateway7683", () => {
         AMOUNT_OUT_ZERO,
         nonce.toBigInt(),
         AZTEC_7683_DOMAIN,
-        MAINNET_CHAIN_ID,
-        DESTINATION_SETTLER,
+        L2_CHAIN_ID,
+        padHex(DESTINATION_SETTLER_EVM_L2.toString()),
         FILL_DEADLINE,
         PUBLIC_ORDER,
         DATA,
@@ -221,9 +227,11 @@ describe("AztecGateway7683", () => {
     expect(parsedResolvedCrossChainOrder.fillDeadline).toBe(FILL_DEADLINE)
     expect(parsedResolvedCrossChainOrder.originChainId).toBe(AZTEC_7683_DOMAIN)
     expect(parsedResolvedCrossChainOrder.fillInstructions[0].originData).toBe(orderData)
-    expect(parsedResolvedCrossChainOrder.fillInstructions[0].destinationChainId).toBe(1)
-    expect(parsedResolvedCrossChainOrder.fillInstructions[0].destinationSettler).toBe(DESTINATION_SETTLER)
-    expect(parsedResolvedCrossChainOrder.maxSpent[0].chainId).toBe(MAINNET_CHAIN_ID)
+    expect(parsedResolvedCrossChainOrder.fillInstructions[0].destinationChainId).toBe(L2_CHAIN_ID)
+    expect(parsedResolvedCrossChainOrder.fillInstructions[0].destinationSettler).toBe(
+      padHex(DESTINATION_SETTLER_EVM_L2.toString()),
+    )
+    expect(parsedResolvedCrossChainOrder.maxSpent[0].chainId).toBe(L2_CHAIN_ID)
     expect(parsedResolvedCrossChainOrder.maxSpent[0].amount).toBe(AMOUNT_OUT_ZERO)
     expect(parsedResolvedCrossChainOrder.maxSpent[0].recipient).toBe(RECIPIENT)
     expect(parsedResolvedCrossChainOrder.maxSpent[0].token).toBe(TOKEN_OUT)
@@ -295,8 +303,8 @@ describe("AztecGateway7683", () => {
         AMOUNT_OUT_ZERO,
         nonce.toBigInt(),
         AZTEC_7683_DOMAIN,
-        MAINNET_CHAIN_ID,
-        DESTINATION_SETTLER,
+        L2_CHAIN_ID,
+        padHex(DESTINATION_SETTLER_EVM_L2.toString()),
         FILL_DEADLINE,
         PRIVATE_ORDER,
         DATA,
@@ -328,9 +336,11 @@ describe("AztecGateway7683", () => {
     expect(parsedResolvedCrossChainOrder.fillDeadline).toBe(FILL_DEADLINE)
     expect(parsedResolvedCrossChainOrder.originChainId).toBe(AZTEC_7683_DOMAIN)
     expect(parsedResolvedCrossChainOrder.fillInstructions[0].originData).toBe(orderData)
-    expect(parsedResolvedCrossChainOrder.fillInstructions[0].destinationChainId).toBe(1)
-    expect(parsedResolvedCrossChainOrder.fillInstructions[0].destinationSettler).toBe(DESTINATION_SETTLER)
-    expect(parsedResolvedCrossChainOrder.maxSpent[0].chainId).toBe(MAINNET_CHAIN_ID)
+    expect(parsedResolvedCrossChainOrder.fillInstructions[0].destinationChainId).toBe(L2_CHAIN_ID)
+    expect(parsedResolvedCrossChainOrder.fillInstructions[0].destinationSettler).toBe(
+      padHex(DESTINATION_SETTLER_EVM_L2.toString()),
+    )
+    expect(parsedResolvedCrossChainOrder.maxSpent[0].chainId).toBe(L2_CHAIN_ID)
     expect(parsedResolvedCrossChainOrder.maxSpent[0].amount).toBe(AMOUNT_OUT_ZERO)
     expect(parsedResolvedCrossChainOrder.maxSpent[0].recipient).toBe(RECIPIENT)
     expect(parsedResolvedCrossChainOrder.maxSpent[0].token).toBe(TOKEN_OUT)
@@ -396,9 +406,9 @@ describe("AztecGateway7683", () => {
         AMOUNT_IN_ZERO,
         amountOut,
         nonce.toBigInt(),
-        MAINNET_CHAIN_ID,
+        L2_CHAIN_ID,
         AZTEC_7683_DOMAIN,
-        DESTINATION_SETTLER,
+        padHex(gateway.address.toString()),
         FILL_DEADLINE,
         PUBLIC_ORDER,
         DATA,
@@ -459,9 +469,8 @@ describe("AztecGateway7683", () => {
     ])
 
     const orderSettlementBlockNumber = await gateway.methods
-      .get_order_settlement_block_number(Array.from(hexToBytes(orderId)))
+      .get_order_settlement_block_number(Fr.fromBufferReduce(Buffer.from(orderId.slice(2), "hex")))
       .simulate()
-
     const [l2ToL1MessageIndex, siblingPath] = await pxe1.getL2ToL1MembershipWitness(
       parseInt(orderSettlementBlockNumber),
       l2ToL1Message,
@@ -502,9 +511,9 @@ describe("AztecGateway7683", () => {
         AMOUNT_IN_ZERO,
         amountOut,
         nonce.toBigInt(),
-        MAINNET_CHAIN_ID,
+        L2_CHAIN_ID,
         AZTEC_7683_DOMAIN,
-        DESTINATION_SETTLER,
+        padHex(gateway.address.toString()),
         FILL_DEADLINE,
         PRIVATE_ORDER,
         DATA,
@@ -575,7 +584,7 @@ describe("AztecGateway7683", () => {
     ])
 
     const orderSettlementBlockNumber = await gateway.methods
-      .get_order_settlement_block_number(Array.from(hexToBytes(orderId)))
+      .get_order_settlement_block_number(Fr.fromBufferReduce(Buffer.from(orderId.slice(2), "hex")))
       .simulate()
 
     const [l2ToL1MessageIndex, siblingPath] = await pxe1.getL2ToL1MembershipWitness(
@@ -632,8 +641,8 @@ describe("AztecGateway7683", () => {
         AMOUNT_OUT_ZERO,
         nonce.toBigInt(),
         AZTEC_7683_DOMAIN,
-        MAINNET_CHAIN_ID,
-        DESTINATION_SETTLER,
+        L2_CHAIN_ID,
+        padHex(DESTINATION_SETTLER_EVM_L2.toString()),
         FILL_DEADLINE,
         PUBLIC_ORDER,
         DATA,
@@ -665,7 +674,7 @@ describe("AztecGateway7683", () => {
 
   it("should open a private order and privately claim a refund", async () => {
     const { token, gateway, wallets, paymentMethod } = await setup(pxes)
-    const [user, filler] = wallets
+    const [user] = wallets
 
     const amountIn = 100n
     const nonce = Fr.random()
@@ -699,8 +708,8 @@ describe("AztecGateway7683", () => {
         AMOUNT_OUT_ZERO,
         nonce.toBigInt(),
         AZTEC_7683_DOMAIN,
-        MAINNET_CHAIN_ID,
-        DESTINATION_SETTLER,
+        L2_CHAIN_ID,
+        padHex(DESTINATION_SETTLER_EVM_L2.toString()),
         FILL_DEADLINE,
         PRIVATE_ORDER,
         DATA,
