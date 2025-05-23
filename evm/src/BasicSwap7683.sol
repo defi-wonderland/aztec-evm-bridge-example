@@ -117,11 +117,16 @@ abstract contract BasicSwap7683 is Base7683 {
     /**
      * @dev Handles settling an individual order, should be called by the inheriting contract when receiving a setting
      * instruction from a remote chain.
+     * @param _messageOrigin The domain from which the message originates.
+     * @param _messageSender The address of the sender on the origin domain.
      * @param _orderId The ID of the order to settle.
      * @param _receiver The receiver address (encoded as bytes32).
      */
-    function _handleSettleOrder(bytes32 _orderId, bytes32 _receiver) internal virtual {
-        (bool isEligible, OrderData memory orderData) = _checkOrderEligibility(_orderId);
+    function _handleSettleOrder(uint32 _messageOrigin, bytes32 _messageSender, bytes32 _orderId, bytes32 _receiver)
+        internal
+        virtual
+    {
+        (bool isEligible, OrderData memory orderData) = _checkOrderEligibility(_messageOrigin, _messageSender, _orderId);
 
         if (!isEligible) return;
 
@@ -136,12 +141,14 @@ abstract contract BasicSwap7683 is Base7683 {
     }
 
     /**
-     * @dev Handles refunding an individual order, should be called by the inheriting contract when receiving a
+     * @dev Handles refunding an individual order, should be called by the inheriting contract when receiving
      * refunding instruction from a remote chain.
+     * @param _messageOrigin The domain from which the message originates.
+     * @param _messageSender The address of the sender on the origin domain.
      * @param _orderId The ID of the order to refund.
      */
-    function _handleRefundOrder(bytes32 _orderId) internal virtual {
-        (bool isEligible, OrderData memory orderData) = _checkOrderEligibility(_orderId);
+    function _handleRefundOrder(uint32 _messageOrigin, bytes32 _messageSender, bytes32 _orderId) internal virtual {
+        (bool isEligible, OrderData memory orderData) = _checkOrderEligibility(_messageOrigin, _messageSender, _orderId);
 
         if (!isEligible) return;
 
@@ -158,10 +165,16 @@ abstract contract BasicSwap7683 is Base7683 {
     /**
      * @notice Checks if order is eligible for settlement or refund .
      * @dev Order must be OPENED and the message was sent from the appropriated chain and contract.
+     * @param _messageOrigin The origin domain of the message.
+     * @param _messageSender The sender identifier of the message.
      * @param _orderId The unique identifier of the order.
      * @return A boolean indicating if the order is valid, and the decoded OrderData structure.
      */
-    function _checkOrderEligibility(bytes32 _orderId) internal virtual returns (bool, OrderData memory) {
+    function _checkOrderEligibility(uint32 _messageOrigin, bytes32 _messageSender, bytes32 _orderId)
+        internal
+        virtual
+        returns (bool, OrderData memory)
+    {
         OrderData memory orderData;
 
         // check if the order is opened to ensure it belongs to this domain, skip otherwise
@@ -169,6 +182,10 @@ abstract contract BasicSwap7683 is Base7683 {
 
         (, bytes memory _orderData) = abi.decode(openOrders[_orderId], (bytes32, bytes));
         orderData = OrderEncoder.decode(_orderData);
+
+        if (orderData.destinationDomain != _messageOrigin || orderData.destinationSettler != _messageSender) {
+            return (false, orderData);
+        }
 
         return (true, orderData);
     }

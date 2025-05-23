@@ -12,7 +12,7 @@ import {IForwarder} from "./interfaces/IForwarder.sol";
 contract Forwarder is IForwarder {
     uint256 private constant L2_GATEWAY_FILLED_ORDERS_SLOT = 51;
     uint256 private constant L2_GATEWAY_REFUNDED_ORDERS_SLOT = 52;
-    uint256 private constant AZTEC_VERSION = 1;
+    uint256 private constant AZTEC_VERSION = 1369311804;
     bytes32 private constant SETTLE_ORDER_TYPE = sha256(abi.encodePacked("SETTLE_ORDER_TYPE"));
     bytes32 private constant REFUND_ORDER_TYPE = sha256(abi.encodePacked("REFUND_ORDER_TYPE"));
     bytes32 public constant SECRET_HASH = sha256(abi.encodePacked("SECRET"));
@@ -40,18 +40,6 @@ contract Forwarder is IForwarder {
         ANCHOR_STATE_REGISTRY = anchorStateRegistry;
     }
 
-    function forwardRefundToL2(
-        DataStructures.L2ToL1Msg memory l2ToL1Message,
-        bytes calldata message,
-        uint256 aztecBlockNumber,
-        uint256 leafIndex,
-        bytes32[] calldata path
-    ) external {
-        bytes32 messageHash = _checkAndConsumeAztecMessage(l2ToL1Message, message, aztecBlockNumber, leafIndex, path);
-        _refundedOrders[messageHash] = true;
-        emit RefundForwardedToL2(message);
-    }
-
     function forwardRefundToAztec(
         bytes32 orderId,
         bytes calldata originData,
@@ -62,6 +50,18 @@ contract Forwarder is IForwarder {
         bytes memory message = abi.encodePacked(REFUND_ORDER_TYPE, orderId);
         _validateAccountStorageAgainstAnchorRegistryStateRootAndSendMessageToAztec(accountProofParams, message);
         emit RefundForwardedToAztec(message);
+    }
+
+    function forwardRefundToL2(
+        DataStructures.L2ToL1Msg memory l2ToL1Message,
+        bytes calldata message,
+        uint256 aztecBlockNumber,
+        uint256 leafIndex,
+        bytes32[] calldata path
+    ) external {
+        bytes32 messageHash = _checkAndConsumeAztecMessage(l2ToL1Message, message, aztecBlockNumber, leafIndex, path);
+        _refundedOrders[messageHash] = true;
+        emit RefundForwardedToL2(message);
     }
 
     function forwardSettleToAztec(
@@ -107,7 +107,6 @@ contract Forwarder is IForwarder {
         bytes32 messageHash = sha256(message) >> 8; // Represent it as an Aztec field element (BN254 scalar, encoded as bytes32)
         require(messageHash == l2ToL1Message.content, InvalidContent());
         require(l2ToL1Message.sender.actor == AZTEC_GATEWAY, InvalidSender());
-        // TODO: version?
         // NOTE: recipient correctness is checked by Outbox
         IOutbox(AZTEC_OUTBOX).consume(l2ToL1Message, aztecBlockNumber, leafIndex, path);
         return messageHash;

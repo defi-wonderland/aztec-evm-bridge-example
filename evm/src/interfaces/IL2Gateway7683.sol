@@ -10,6 +10,7 @@ interface IL2Gateway7683 is IOriginSettler, IDestinationSettler {
     error invalidOrderType();
 
     event ForwarderSet(address forwarder);
+    event AztecGateway7683Set(address aztecGateway7683);
 
     function settle(
         bytes calldata message,
@@ -18,4 +19,6 @@ interface IL2Gateway7683 is IOriginSettler, IDestinationSettler {
     ) external;
 
     function setForwarder(address forwarder) external;
+
+    function setAztecGateway7683(address aztecGateway7683) external;
 }
