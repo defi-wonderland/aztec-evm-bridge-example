@@ -586,4 +586,158 @@ describe("AztecGateway7683", () => {
     expect(l2ToL1MessageIndex).toBe(0n)
     expect(siblingPath.pathSize).toBe(1)
   })
+
+  it("should open a public order and publicly claim the refund", async () => {
+    const { token, gateway, wallets, paymentMethod } = await setup(pxes)
+    const [user, filler] = wallets
+
+    const amountIn = 100n
+    const nonce = Fr.random()
+    await (
+      await user.setPublicAuthWit(
+        {
+          caller: gateway.address,
+          action: token
+            .withWallet(filler)
+            .methods.transfer_in_public(user.getAddress(), gateway.address, amountIn, nonce),
+        },
+        true,
+      )
+    )
+      .send({ fee: { paymentMethod } })
+      .wait()
+
+    const orderData = encodePacked(
+      [
+        "bytes32",
+        "bytes32",
+        "bytes32",
+        "bytes32",
+        "uint256",
+        "uint256",
+        "uint256",
+        "uint32",
+        "uint32",
+        "bytes32",
+        "uint32",
+        "uint8",
+        "bytes32",
+      ],
+      [
+        user.getAddress().toString(),
+        RECIPIENT,
+        token.address.toString(),
+        TOKEN_OUT,
+        amountIn,
+        AMOUNT_OUT_ZERO,
+        nonce.toBigInt(),
+        AZTEC_7683_DOMAIN,
+        MAINNET_CHAIN_ID,
+        DESTINATION_SETTLER,
+        FILL_DEADLINE,
+        PUBLIC_ORDER,
+        DATA,
+      ],
+    )
+    const orderId = sha256(orderData)
+
+    await gateway
+      .withWallet(user)
+      .methods.open({
+        fill_deadline: FILL_DEADLINE,
+        order_data: Array.from(hexToBytes(orderData)),
+        order_data_type: Array.from(hexToBytes(ORDER_DATA_TYPE)),
+      })
+      .send({ fee: { paymentMethod } })
+      .wait()
+
+    // NOTE: suppose that the order refund has been instructed on the source chain
+    const leafIndex = 0 // TODO: change it
+    const balancePre = await token.withWallet(user).methods.balance_of_public(user.getAddress()).simulate()
+    await gateway
+      .withWallet(user)
+      .methods.claim_refund(Array.from(hexToBytes(orderData)), Array.from(hexToBytes(orderId)), leafIndex)
+      .send({ fee: { paymentMethod } })
+      .wait()
+    const balancePost = await token.withWallet(user).methods.balance_of_public(user.getAddress()).simulate()
+    expect(balancePost).toBe(balancePre + amountIn)
+  })
+
+  it("should open a private order and privately claim a refund", async () => {
+    const { token, gateway, wallets, paymentMethod } = await setup(pxes)
+    const [user, filler] = wallets
+
+    const amountIn = 100n
+    const nonce = Fr.random()
+    const witness = await user.createAuthWit({
+      caller: gateway.address,
+      action: token.withWallet(user).methods.transfer_to_public(user.getAddress(), gateway.address, amountIn, nonce),
+    })
+
+    const orderData = encodePacked(
+      [
+        "bytes32",
+        "bytes32",
+        "bytes32",
+        "bytes32",
+        "uint256",
+        "uint256",
+        "uint256",
+        "uint32",
+        "uint32",
+        "bytes32",
+        "uint32",
+        "uint8",
+        "bytes32",
+      ],
+      [
+        PRIVATE_SENDER,
+        SECRET_HASH,
+        token.address.toString(),
+        TOKEN_OUT,
+        amountIn,
+        AMOUNT_OUT_ZERO,
+        nonce.toBigInt(),
+        AZTEC_7683_DOMAIN,
+        MAINNET_CHAIN_ID,
+        DESTINATION_SETTLER,
+        FILL_DEADLINE,
+        PRIVATE_ORDER,
+        DATA,
+      ],
+    )
+    const orderId = sha256(orderData)
+
+    await gateway
+      .withWallet(user)
+      .methods.open_private({
+        fill_deadline: FILL_DEADLINE,
+        order_data: Array.from(hexToBytes(orderData)),
+        order_data_type: Array.from(hexToBytes(ORDER_DATA_TYPE)),
+      })
+      .with({
+        authWitnesses: [witness],
+      })
+      .send({ fee: { paymentMethod } })
+      .wait()
+
+    // NOTE: suppose that the order refund has been instructed on the source chain
+    const leafIndex = 0 // TODO: change it
+    const balancePre = await token.withWallet(user).methods.balance_of_private(user.getAddress()).simulate()
+    await gateway
+      .withWallet(user)
+      .methods.claim_refund_private(
+        Array.from(hexToBytes(SECRET)),
+        Array.from(hexToBytes(orderData)),
+        Array.from(hexToBytes(orderId)),
+        leafIndex,
+      )
+      .with({
+        authWitnesses: [witness],
+      })
+      .send({ fee: { paymentMethod } })
+      .wait()
+    const balancePost = await token.withWallet(user).methods.balance_of_private(user.getAddress()).simulate()
+    expect(balancePost).toBe(balancePre + amountIn)
+  })
 })

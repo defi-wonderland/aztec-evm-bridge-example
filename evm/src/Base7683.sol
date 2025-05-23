@@ -235,6 +235,50 @@ abstract contract Base7683 is IOriginSettler, IDestinationSettler {
     }
 
     /**
+     * @notice Refunds a batch of expired GaslessCrossChainOrders on the chain where the orders were opened.
+     * The refunded status should not be changed here but rather on the origin chain. To allow the user to retry in
+     * case some error occurs.
+     * Ensuring the order is eligible for refunding in the origin chain is the responsibility of the caller.
+     * @param _orders An array of GaslessCrossChainOrders to refund.
+     */
+    function refund(GaslessCrossChainOrder[] memory _orders) external payable {
+        bytes32[] memory orderIds = new bytes32[](_orders.length);
+        for (uint256 i = 0; i < _orders.length; i += 1) {
+            bytes32 orderId = _getOrderId(_orders[i]);
+            orderIds[i] = orderId;
+
+            if (orderStatus[orderId] != UNKNOWN) revert InvalidOrderStatus();
+            if (block.timestamp <= _orders[i].fillDeadline) revert OrderFillNotExpired();
+        }
+
+        _refundOrders(_orders, orderIds);
+
+        emit Refund(orderIds);
+    }
+
+    /**
+     * @notice Refunds a batch of expired OnchainCrossChainOrder on the chain where the orders were opened.
+     * The refunded status should not be changed here but rather on the origin chain. To allow the user to retry in
+     * case some error occurs.
+     * Ensuring the order is eligible for refunding the origin chain is the responsibility of the caller.
+     * @param _orders An array of GaslessCrossChainOrders to refund.
+     */
+    function refund(OnchainCrossChainOrder[] memory _orders) external payable {
+        bytes32[] memory orderIds = new bytes32[](_orders.length);
+        for (uint256 i = 0; i < _orders.length; i += 1) {
+            bytes32 orderId = _getOrderId(_orders[i]);
+            orderIds[i] = orderId;
+
+            if (orderStatus[orderId] != UNKNOWN) revert InvalidOrderStatus();
+            if (block.timestamp <= _orders[i].fillDeadline) revert OrderFillNotExpired();
+        }
+
+        _refundOrders(_orders, orderIds);
+
+        emit Refund(orderIds);
+    }
+
+    /**
      * @notice Invalidates a nonce for the user calling the function.
      * @param _nonce The nonce to invalidate.
      */
@@ -369,6 +413,22 @@ abstract contract Base7683 is IOriginSettler, IDestinationSettler {
      * @param _fillerData Data provided by the filler, including preferences and additional information.
      */
     function _fillOrder(bytes32 _orderId, bytes calldata _originData, bytes calldata _fillerData) internal virtual;
+
+    /**
+     * @notice Refunds a batch of OnchainCrossChainOrders.
+     * @dev To be implemented by the inheriting contract. Contains logic specific to refunds.
+     * @param _orders An array of OnchainCrossChainOrders to refund.
+     * @param _orderIds An array of IDs for the orders to refund.
+     */
+    function _refundOrders(OnchainCrossChainOrder[] memory _orders, bytes32[] memory _orderIds) internal virtual;
+
+    /**
+     * @notice Refunds a batch of GaslessCrossChainOrders.
+     * @dev To be implemented by the inheriting contract. Contains logic specific to refunds.
+     * @param _orders An array of GaslessCrossChainOrders to refund.
+     * @param _orderIds An array of IDs for the orders to refund.
+     */
+    function _refundOrders(GaslessCrossChainOrder[] memory _orders, bytes32[] memory _orderIds) internal virtual;
 
     /**
      * @notice Retrieves the local domain identifier.

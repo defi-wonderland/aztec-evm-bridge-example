@@ -41,6 +41,8 @@ abstract contract BasicSwap7683 is Base7683 {
     // ============ Public Storage ============
     /// @notice Tracks filled orders commitments.
     mapping(bytes32 orderId => bytes32 commitment) public filledOrdersCommitments;
+    /// @notice Tracks refunded orders commitments.
+    mapping(bytes32 orderId => bytes32 commitment) public refundedOrdersCommitments;
 
     // ============ Upgrade Gap ============
     /// @dev Reserved storage slots for upgradeability.
@@ -83,6 +85,34 @@ abstract contract BasicSwap7683 is Base7683 {
     // ============ External Functions ============
 
     // ============ Internal Functions ============
+
+    /**
+     * @dev Refunds multiple OnchainCrossChain orders by dispatching refund instructions.
+     * The proper status of all the orders (NOT filled and expired) is validated on the Base7683 before calling this
+     * function.
+     * @param _orders The orders to refund.
+     * @param _orderIds The IDs of the orders to refund.
+     */
+    function _refundOrders(OnchainCrossChainOrder[] memory _orders, bytes32[] memory _orderIds) internal override {
+        for (uint256 i = 0; i < _orders.length; i += 1) {
+            bytes32 orderId = _orderIds[i];
+            refundedOrdersCommitments[orderId] = keccak256(_orders[i].orderData);
+        }
+    }
+
+    /**
+     * @dev Refunds multiple GaslessCrossChain orders by dispatching refund instructions.
+     * The proper status of all the orders (NOT filled and expired) is validated on the Base7683 before calling this
+     * function.
+     * @param _orders The orders to refund.
+     * @param _orderIds The IDs of the orders to refund.
+     */
+    function _refundOrders(GaslessCrossChainOrder[] memory _orders, bytes32[] memory _orderIds) internal override {
+        for (uint256 i = 0; i < _orders.length; i += 1) {
+            bytes32 orderId = _orderIds[i];
+            refundedOrdersCommitments[orderId] = keccak256(_orders[i].orderData);
+        }
+    }
 
     /**
      * @dev Handles settling an individual order, should be called by the inheriting contract when receiving a setting

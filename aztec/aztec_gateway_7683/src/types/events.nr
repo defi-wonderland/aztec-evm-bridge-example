@@ -176,8 +176,8 @@ impl Open {
 //#[event]
 #[derive(Serialize)]
 pub struct Settled {
-    order_id: [u8; 32],
-    receiver: [u8; 32],
+    pub order_id: [u8; 32],
+    pub receiver: [u8; 32],
 }
 
 impl Packable<3> for Settled {

@@ -8,9 +8,12 @@ interface IForwarder {
     error InvalidContent();
     error InvalidFilledOrderCommitment();
     error InvalidRecipient();
+    error InvalidRefundedOrderCommitment();
     error InvalidSender();
     error InvalidStorageKey();
 
+    event RefundForwardedToL2(bytes message);
+    event RefundForwardedToAztec(bytes message);
     event SettleForwardedToL2(bytes message);
     event SettleForwardedToAztec(bytes message);
 

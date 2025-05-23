@@ -12,7 +12,9 @@ contract L2Gateway7683 is IL2Gateway7683, BasicSwap7683, Ownable {
     using BytesReader for bytes;
 
     uint256 private constant FORWARDER_SETTLED_ORDERS_SLOT = 0;
+    uint256 private constant FORWARDER_REFUNED_ORDERS_SLOT = 1;
     bytes32 private constant SETTLE_ORDER_TYPE = sha256(abi.encodePacked("SETTLE_ORDER_TYPE"));
+    bytes32 private constant REFUND_ORDER_TYPE = sha256(abi.encodePacked("REFUND_ORDER_TYPE"));
     address public forwarder;
 
     constructor(address permit2) BasicSwap7683(permit2) Ownable(msg.sender) {}
@@ -25,20 +27,28 @@ contract L2Gateway7683 is IL2Gateway7683, BasicSwap7683, Ownable {
         // NOTE: At this point, I need to check if the order has been filled by reading the corresponding mapping inside the forwarder.
         // When a solver fills the intent, a message is sent via the Portal from Aztec to Ethereum, reaching the forwarder.
         // The data stored in the _settledOrders mapping must contain the necessary (and compatible) information required to call _handleSettleOrder.
-
-        bytes32 storageKey = _getStorageKeyByMessage(message);
-        require(bytes32(accountProofParams.storageKey) == storageKey, InvalidStorageKey());
-        require(_bytesToBool(accountProofParams.storageValue), InvalidStorageValue());
-        require(StateValidator.validateState(forwarder, stateProofParams, accountProofParams), InvalidState());
-
+        _verifyForwarderProof(message, stateProofParams, accountProofParams, FORWARDER_SETTLED_ORDERS_SLOT);
         bytes32 orderType = message.readBytes32(0);
         bytes32 orderId = message.readBytes32(32);
         bytes32 receiver = message.readBytes32(64); // filler data
         require(orderType == SETTLE_ORDER_TYPE, invalidOrderType());
-
         // NOTE: No need to check the sender, as the forwarder verifies
         // that the message is sent from AztecGateway7683 before storing the value.
+        // TODO: reintegrate destinationSettler
         _handleSettleOrder(orderId, receiver);
+    }
+
+    function refund(
+        bytes calldata message,
+        StateValidator.StateProofParameters memory stateProofParams,
+        StateValidator.AccountProofParameters memory accountProofParams
+    ) external {
+        _verifyForwarderProof(message, stateProofParams, accountProofParams, FORWARDER_REFUNED_ORDERS_SLOT);
+        bytes32 orderType = message.readBytes32(0);
+        bytes32 orderId = message.readBytes32(32);
+        require(orderType == REFUND_ORDER_TYPE, invalidOrderType());
+        // TODO: reintegrate destinationSettler
+        _handleRefundOrder(orderId);
     }
 
     function setForwarder(address forwarder_) external onlyOwner {
@@ -46,8 +56,8 @@ contract L2Gateway7683 is IL2Gateway7683, BasicSwap7683, Ownable {
         emit ForwarderSet(forwarder_);
     }
 
-    function _getStorageKeyByMessage(bytes memory message) internal pure returns (bytes32) {
-        return keccak256(abi.encode(sha256(message) >> 8, FORWARDER_SETTLED_ORDERS_SLOT)); // Represent it as an Aztec field element (BN254 scalar, encoded as bytes32)
+    function _getStorageKeyByMessage(bytes memory message, uint256 slot) internal pure returns (bytes32) {
+        return keccak256(abi.encode(sha256(message) >> 8, slot)); // Represent it as an Aztec field element (BN254 scalar, encoded as bytes32)
     }
 
     function _localDomain() internal view override returns (uint32) {
@@ -59,5 +69,17 @@ contract L2Gateway7683 is IL2Gateway7683, BasicSwap7683, Ownable {
             let len := mload(data)
             res := mload(add(data, 0x20))
         }
+    }
+
+    function _verifyForwarderProof(
+        bytes calldata message,
+        StateValidator.StateProofParameters memory stateProofParams,
+        StateValidator.AccountProofParameters memory accountProofParams,
+        uint256 slot
+    ) internal view {
+        bytes32 storageKey = _getStorageKeyByMessage(message, slot);
+        require(bytes32(accountProofParams.storageKey) == storageKey, InvalidStorageKey());
+        require(_bytesToBool(accountProofParams.storageValue), InvalidStorageValue());
+        require(StateValidator.validateState(forwarder, stateProofParams, accountProofParams), InvalidState());
     }
 }
