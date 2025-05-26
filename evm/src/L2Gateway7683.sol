@@ -2,9 +2,8 @@
 pragma solidity ^0.8.28;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-
-import {BasicSwap7683} from "./BasicSwap7683.sol";
 import {TypeCasts} from "@hyperlane-xyz/libs/TypeCasts.sol";
+import {BasicSwap7683} from "./BasicSwap7683.sol";
 import {StateValidator} from "./libs/StateValidator.sol";
 import {BytesReader} from "./libs/BytesReader.sol";
 import {IL2Gateway7683} from "./interfaces/IL2Gateway7683.sol";
