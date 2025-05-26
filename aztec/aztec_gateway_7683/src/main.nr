@@ -30,7 +30,7 @@ pub contract AztecGateway7683 {
     use crate::{
         config::Config,
         types::{
-            events::{Filled, Open, Settled},
+            events::{Filled, Open/*, Settled*/},
             helpers::InternalRCOParams,
             onchain_cross_chain_order::OnchainCrossChainOrder,
             order_data::{
@@ -56,7 +56,7 @@ pub contract AztecGateway7683 {
     struct Storage<Context> {
         config: PublicImmutable<Config, Context>,
         claimable_orders: Map<Field, PublicMutable<Field, Context>, Context>,
-        open_orders: Map<Field, PublicMutable<[u8; 32], Context>, Context>,
+        open_orders: Map<Field, PublicMutable<Field, Context>, Context>,
         order_status: Map<Field, PublicMutable<Field, Context>, Context>,
         used_nonces: Map<AztecAddress, Map<Field, PublicMutable<bool, Context>, Context>, Context>,
         orders_settlement_block_numbers: Map<Field, PublicMutable<Field, Context>, Context>,
@@ -141,12 +141,12 @@ pub contract AztecGateway7683 {
             "Invalid destination domain",
         );
 
-        /*context.consume_l1_to_l2_message(
+        context.consume_l1_to_l2_message(
             _get_refund_content_hash(order_id_bytes),
             Field::from_be_bytes(SECRET),
             storage.config.read().portal,
             message_leaf_index,
-        );*/
+        );
 
         Token::at(u8_32_to_aztec_address(order_data.input_token))
             .transfer_in_public(
@@ -188,12 +188,12 @@ pub contract AztecGateway7683 {
             "Invalid destination domain",
         );
 
-        /*context.consume_l1_to_l2_message(
+        context.consume_l1_to_l2_message(
             _get_refund_content_hash(order_id_bytes),
             Field::from_be_bytes(SECRET),
             storage.config.read().portal,
             message_leaf_index,
-        );*/
+        );
 
         let token = u8_32_to_aztec_address(order_data.input_token);
         let partial_note = Token::at(token)
@@ -428,12 +428,12 @@ pub contract AztecGateway7683 {
             "Invalid destination domain",
         );
 
-        /*context.consume_l1_to_l2_message(
+        context.consume_l1_to_l2_message(
             _get_settle_content_hash(order_id_bytes, filler_data_bytes),
             Field::from_be_bytes(SECRET),
             storage.config.read().portal,
             message_leaf_index,
-        );*/
+        );
 
         // transfer from gateway public balance to user public balande
         Token::at(u8_32_to_aztec_address(order_data.input_token))
@@ -446,8 +446,8 @@ pub contract AztecGateway7683 {
             .call(&mut context);
 
         storage.order_status.at(order_id).write(SETTLED);
-        context.emit_public_log(Settled { order_id: order_id_bytes, receiver: filler_data_bytes }
-            .pack());
+        /*context.emit_public_log(Settled { order_id: order_id_bytes, receiver: filler_data_bytes }
+            .pack());*/
     }
 
     #[private]
@@ -481,12 +481,12 @@ pub contract AztecGateway7683 {
             "Invalid destination domain",
         );
 
-        /*context.consume_l1_to_l2_message(
+        context.consume_l1_to_l2_message(
             _get_settle_content_hash(order_id_bytes, filler_data_bytes),
             Field::from_be_bytes(SECRET),
             storage.config.read().portal,
             message_leaf_index,
-        );*/
+        );
 
         let filler = u8_32_to_aztec_address(filler_data_bytes);
         let token = u8_32_to_aztec_address(order_data.input_token);
@@ -500,16 +500,16 @@ pub contract AztecGateway7683 {
             ._update_order_status_private(order_id, SETTLED)
             .enqueue(&mut context);
 
-        AztecGateway7683::at(context.this_address())
+        /*AztecGateway7683::at(context.this_address())
             ._emit_settled_private(order_id_bytes, filler_data_bytes)
-            .enqueue(&mut context);
+            .enqueue(&mut context);*/
     }
 
     #[public]
     #[internal]
     fn _assert_nonce_and_set_order_details_private(
         order_id: Field,
-        order_commitment: [u8; 32],
+        order_commitment: Field,
         nonce: Field,
     ) {
         assert(!storage.used_nonces.at(context.msg_sender()).at(nonce).read(), "Invalid nonce");
@@ -529,7 +529,7 @@ pub contract AztecGateway7683 {
 
     #[public]
     #[internal]
-    fn _assert_order_commitment_private(order_id: Field, order_commitment: [u8; 32]) {
+    fn _assert_order_commitment_private(order_id: Field, order_commitment: Field) {
         assert(storage.open_orders.at(order_id).read() == order_commitment, "Invalid order");
     }
 
@@ -542,7 +542,7 @@ pub contract AztecGateway7683 {
 
     #[public]
     #[internal]
-    fn _check_refund_private(order_commitment: [u8; 32], order_id_bytes: [u8; 32]) {
+    fn _check_refund_private(order_commitment: Field, order_id_bytes: [u8; 32]) {
         let order_id = Field::from_be_bytes(order_id_bytes);
         assert(storage.order_status.at(order_id).read() == OPENED, "Order not opened");
         assert(storage.open_orders.at(order_id).read() == order_commitment, "Invalid order");
@@ -561,11 +561,11 @@ pub contract AztecGateway7683 {
         context.emit_public_log(event.open2.pack());
     }
 
-    #[public]
+    /*#[public]
     #[internal]
     fn _emit_settled_private(order_id_bytes: [u8; 32], receiver: [u8; 32]) {
         context.emit_public_log(Settled { order_id: order_id_bytes, receiver }.pack());
-    }
+    }*/
 
     #[public]
     #[internal]
@@ -606,15 +606,15 @@ pub contract AztecGateway7683 {
     }
 
     #[contract_library_method]
-    fn _get_order_commitment(order_data_bytes: [u8; ORDER_DATA_LENGTH]) -> [u8; 32] {
-        let mut data: [u8; ORDER_DATA_LENGTH + 32] = [0; ORDER_DATA_LENGTH + 32];
+    fn _get_order_commitment(order_data_bytes: [u8; ORDER_DATA_LENGTH]) -> Field {
+        let mut bytes: [u8; ORDER_DATA_LENGTH + 32] = [0; ORDER_DATA_LENGTH + 32];
         for i in 0..32 {
-            data[i] = ORDER_DATA_TYPE[i];
+            bytes[i] = ORDER_DATA_TYPE[i];
         }
         for i in 0..ORDER_DATA_LENGTH {
-            data[i + 32] = order_data_bytes[i];
+            bytes[i + 32] = order_data_bytes[i];
         }
-        sha256::digest(data)
+        sha256_to_field(bytes)
     }
 
     #[contract_library_method]

@@ -119,6 +119,7 @@ const setup = async (pxes: PXE[]) => {
   }
 }
 
+// NOTE: before running the tests comment all occurences of context.consume_l1_to_l2_message
 describe("AztecGateway7683", () => {
   let pxes: PXE[]
   let sandboxInstance
@@ -221,7 +222,7 @@ describe("AztecGateway7683", () => {
       contractAddress: gateway.address,
     })
 
-    const { resolvedOrder } = parseOpenLog(logs[0].log.log, logs[1].log.log)
+    const { resolvedOrder } = parseOpenLog(logs[0].log.fields, logs[1].log.fields)
     const parsedResolvedCrossChainOrder = parseResolvedCrossChainOrder(resolvedOrder)
     expect(parsedResolvedCrossChainOrder.orderId).toBe(sha256(orderData))
     expect(parsedResolvedCrossChainOrder.fillDeadline).toBe(FILL_DEADLINE)
@@ -261,7 +262,7 @@ describe("AztecGateway7683", () => {
       toBlock: fromBlock + 2,
       contractAddress: gateway.address,
     })
-    const parsedSettledLog = parseSettledLog(logs2[logs2.length - 1].log.log)
+    const parsedSettledLog = parseSettledLog(logs2[logs2.length - 1].log.fields)
     expect(parsedSettledLog.orderId).toBe(parsedResolvedCrossChainOrder.orderId)
     expect(parsedSettledLog.receiver).toBe(filler.getAddress().toString())
   })
@@ -330,7 +331,7 @@ describe("AztecGateway7683", () => {
       toBlock: fromBlock + 2,
       contractAddress: gateway.address,
     })
-    const { resolvedOrder } = parseOpenLog(logs[0].log.log, logs[1].log.log)
+    const { resolvedOrder } = parseOpenLog(logs[0].log.fields, logs[1].log.fields)
     const parsedResolvedCrossChainOrder = parseResolvedCrossChainOrder(resolvedOrder)
     expect(parsedResolvedCrossChainOrder.orderId).toBe(sha256(orderData))
     expect(parsedResolvedCrossChainOrder.fillDeadline).toBe(FILL_DEADLINE)
@@ -370,7 +371,7 @@ describe("AztecGateway7683", () => {
       toBlock: fromBlock + 2,
       contractAddress: gateway.address,
     })
-    const parsedSettledLog = parseSettledLog(logs2[logs2.length - 1].log.log)
+    const parsedSettledLog = parseSettledLog(logs2[logs2.length - 1].log.fields)
     expect(parsedSettledLog.orderId).toBe(parsedResolvedCrossChainOrder.orderId)
     expect(parsedSettledLog.receiver).toBe(filler.getAddress().toString())
   })
@@ -449,7 +450,7 @@ describe("AztecGateway7683", () => {
       toBlock: fromBlock + 2,
       contractAddress: gateway.address,
     })
-    const parsedLog = parseFilledLog(logs[0].log.log)
+    const parsedLog = parseFilledLog(logs[0].log.fields)
     expect(orderId).toBe(parsedLog.orderId)
     expect(originData).toBe(parsedLog.originData)
     expect(fillerData).toBe(parsedLog.fillerData)
@@ -551,7 +552,7 @@ describe("AztecGateway7683", () => {
       toBlock: fromBlock + 2,
       contractAddress: gateway.address,
     })
-    const parsedLog = parseFilledLog(logs[0].log.log)
+    const parsedLog = parseFilledLog(logs[0].log.fields)
     expect(orderId).toBe(parsedLog.orderId)
     expect(originData).toBe(parsedLog.originData)
     expect(fillerData).toBe(parsedLog.fillerData)
