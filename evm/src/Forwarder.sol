@@ -12,7 +12,7 @@ import {IForwarder} from "./interfaces/IForwarder.sol";
 contract Forwarder is IForwarder {
     uint256 private constant L2_GATEWAY_FILLED_ORDERS_SLOT = 51;
     uint256 private constant L2_GATEWAY_REFUNDED_ORDERS_SLOT = 52;
-    uint256 private constant AZTEC_VERSION = 1369311804;
+    uint256 private constant AZTEC_VERSION = 4189337207;
     bytes32 private constant SETTLE_ORDER_TYPE = sha256(abi.encodePacked("SETTLE_ORDER_TYPE"));
     bytes32 private constant REFUND_ORDER_TYPE = sha256(abi.encodePacked("REFUND_ORDER_TYPE"));
     bytes32 public constant SECRET_HASH = sha256(abi.encodePacked("SECRET"));
