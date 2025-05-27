@@ -1,8 +1,9 @@
 import winston from "winston"
 import { AztecAddress } from "@aztec/aztec.js"
 
-import type { PXE } from "@aztec/aztec.js"
 import { parseOpenLog, parseResolvedCrossChainOrder } from "../utils/aztec"
+
+import type { PXE } from "@aztec/aztec.js"
 
 interface WatcherConfigs {
   service: string
@@ -71,23 +72,24 @@ class AztecWatcher {
       // Currently, for the POC, it's enough to check whether `fields[0]` of both logs are the same
       // and that the log index is sequential (e.g., 0 and 1).
       const groupedLogs = logs.reduce((acc, obj) => {
-        const groupKey = obj.log.log[0].toString()
+        const groupKey = obj.log.fields[0].toString()
         if (!acc[groupKey]) {
           acc[groupKey] = []
         }
         acc[groupKey].push(obj)
         return acc
       }, {} as any)
+
       const joinedLogs = Object.keys(groupedLogs)
         .filter((orderId) => {
           const logs = groupedLogs[orderId].filter(
-            ({ log }: { log: any }) => log.getEmittedFields().length === 12 || log.getEmittedFields().length === 14,
+            ({ log }: { log: any }) => log.getEmittedFields().length === 11 || log.getEmittedFields().length === 13,
           )
           return logs.length === 2
         })
         .map((orderId) => {
           const [open1, open2] = groupedLogs[orderId]
-          const open = parseOpenLog(open1.log.log, open2.log.log)
+          const open = parseOpenLog(open1.log.fields, open2.log.fields)
           return {
             orderId: open.orderId,
             resolvedOrder: parseResolvedCrossChainOrder(open.resolvedOrder),

@@ -1,6 +1,5 @@
 import "dotenv/config"
 import * as chains from "viem/chains"
-import { AztecAddress } from "@aztec/aztec.js"
 import { MongoClient } from "mongodb"
 
 import EvmWatcher from "./watchers/evm.watcher.js"
@@ -9,9 +8,8 @@ import OrderService from "./services/order.service.js"
 import SettlementService from "./services/settlement.service.js"
 import logger from "./utils/logger.js"
 import MultiClient from "./MultiClient.js"
-import { getAztecNode, getAztecWallet, getPxe, registerContract } from "./utils/aztec.js"
+import { getAztecNode, getAztecWallet, getPxe, initPxe, registerContracts } from "./utils/aztec.js"
 import l2Gateway7683Abi from "./abis/l2Gateway7683.js"
-import { AztecGateway7683ContractArtifact } from "./artifacts/AztecGateway7683/AztecGateway7683.js"
 
 import type { Log } from "viem"
 
@@ -19,7 +17,7 @@ const AZTEC_GATEWAY_ADDRESS = process.env.AZTEC_GATEWAY_ADDRESS as `0x${string}`
 const L2_EVM_GATEWAY_ADDRESS = process.env.L2_EVM_GATEWAY_ADDRESS as `0x${string}`
 const FORWARDER_ADDRESS = process.env.FORWARDER_ADDRESS as `0x${string}`
 const FORWARDER_RPC_URL = process.env.FORWARDER_RPC_URL as string
-const PK = process.env.PK as `0x${string}`
+const PK_EVM = process.env.PK_EVM as `0x${string}`
 const EVM_L2_RPC_URL = process.env.EVM_L2_RPC_URL as string
 const BEACON_API_URL = process.env.BEACON_API_URL as string
 const EVM_WATCH_INTERVAL_TIME_MS = Number(process.env.EVM_WATCH_INTERVAL_TIME_MS as string)
@@ -30,11 +28,12 @@ const main = async () => {
   await mongoClient.connect()
   const db = mongoClient.db((process.env.MONGO_DB_NAME as string) || "filler")
 
+  await initPxe()
+
   const aztecWallet = await getAztecWallet()
-  logger.info("registering gateway contract into the PXE ...")
-  await registerContract(AztecAddress.fromString(AZTEC_GATEWAY_ADDRESS), {
-    wallet: aztecWallet,
-    artifact: AztecGateway7683ContractArtifact,
+  logger.info("registering contracts into the PXE ...")
+  await registerContracts({
+    aztecGatewayAddress: AZTEC_GATEWAY_ADDRESS,
   })
 
   const l2EvmChain = Object.values(chains).find(
@@ -46,7 +45,7 @@ const main = async () => {
 
   const evmMultiClient = new MultiClient({
     chains: [l2EvmChain, chains.sepolia],
-    privateKey: PK,
+    privateKey: PK_EVM,
     rpcUrls: {
       [l2EvmChain.id]: EVM_L2_RPC_URL,
       [l1Chain.id]: FORWARDER_RPC_URL,

@@ -1,23 +1,78 @@
-import { getDeployedTestAccountsWallets } from "@aztec/accounts/testing"
-import { createAztecNodeClient, createPXEClient, AztecAddress, waitForPXE, getWallet } from "@aztec/aztec.js"
+import {
+  createAztecNodeClient,
+  AztecAddress,
+  waitForPXE,
+  Fr,
+  getContractInstanceFromDeployParams,
+  SponsoredFeePaymentMethod,
+} from "@aztec/aztec.js"
+import { deriveSigningKey } from "@aztec/stdlib/keys"
+import { getSchnorrAccount, SchnorrAccountContractArtifact } from "@aztec/accounts/schnorr"
+import { SponsoredFPCContract, SponsoredFPCContractArtifact } from "@aztec/noir-contracts.js/SponsoredFPC"
+import { createPXEService, getPXEServiceConfig } from "@aztec/pxe/server"
+import { createStore } from "@aztec/kv-store/lmdb"
 
-import type { AztecNode, ContractInstanceWithAddress, Fr, PXE, Wallet } from "@aztec/aztec.js"
+import type { AztecNode, ContractInstanceWithAddress, PXE, AccountWalletWithSecretKey } from "@aztec/aztec.js"
 import type { ResolvedOrder } from "../types"
-
-export const getAztecWallet = async (): Promise<Wallet> => {
-  const pxe = await getPxe()
-  const wallet = (await getDeployedTestAccountsWallets(pxe))[0]
-  return wallet as Wallet
-}
+import { AztecGateway7683ContractArtifact } from "../artifacts/AztecGateway7683/AztecGateway7683"
 
 type RegisterContractOptions = {
-  wallet: Wallet
   artifact: any
 }
 
-export const getPxe = async (): Promise<PXE> => {
-  const pxe = createPXEClient(process.env.PXE_URL || "http://localhost:8080")
+let pxe: PXE
+let accountRegistered = false
+
+export const getAztecWallet = async (): Promise<AccountWalletWithSecretKey> => {
+  const pxe = getPxe()
+  const secretKey = Fr.fromHexString(process.env.AZTEC_SECRET_KEY as string)
+  const salt = Fr.fromHexString(process.env.AZTEC_SALT as string)
+  const signingKey = deriveSigningKey(secretKey)
+  const account = await getSchnorrAccount(pxe, secretKey, signingKey, salt)
+  const wallet = await account.getWallet()
+
+  if (!accountRegistered) {
+    await pxe.registerContract({
+      instance: account.getInstance(),
+      artifact: SchnorrAccountContractArtifact,
+    })
+    accountRegistered = true
+  }
+
+  return wallet
+}
+
+export const initPxe = async () => {
+  const node = await getAztecNode()
+  const fullConfig = {
+    ...getPXEServiceConfig(),
+    l1Contracts: await node.getL1ContractAddresses(),
+    proverEnabled: true,
+  }
+  const store = await createStore("filler-pxe", {
+    dataDirectory: "store",
+    dataStoreMapSizeKB: 1e6,
+  })
+  pxe = await createPXEService(node, fullConfig, true, store)
   await waitForPXE(pxe)
+}
+
+export const registerContracts = async ({ aztecGatewayAddress }: { aztecGatewayAddress: string }) => {
+  const pxe = getPxe()
+
+  await pxe.registerContract({
+    instance: await getSponsoredFPCInstance(),
+    artifact: SponsoredFPCContractArtifact,
+  })
+
+  await pxe.registerSender(AztecAddress.fromString(aztecGatewayAddress))
+
+  await registerContractWithoutInstance(AztecAddress.fromString(aztecGatewayAddress), {
+    artifact: AztecGateway7683ContractArtifact,
+  })
+}
+
+export const getPxe = () => {
   return pxe
 }
 
@@ -25,13 +80,19 @@ export const getAztecNode = async (): Promise<AztecNode> => {
   return await createAztecNodeClient(process.env.PXE_URL || "http://localhost:8080")
 }
 
-export const registerContract = async (
+export const getPaymentMethod = async (): Promise<SponsoredFeePaymentMethod> => {
+  const paymentMethod = new SponsoredFeePaymentMethod(await getSponsoredFPCAddress())
+  return paymentMethod
+}
+
+export const registerContractWithoutInstance = async (
   address: AztecAddress,
-  { wallet, artifact }: RegisterContractOptions,
+  { artifact }: RegisterContractOptions,
 ): Promise<void> => {
   const node = await getAztecNode()
   const contractInstance = await node.getContract(address)
-  await wallet.registerContract({
+  const pxe = await getPxe()
+  await pxe.registerContract({
     instance: contractInstance as ContractInstanceWithAddress,
     artifact,
   })
@@ -127,4 +188,25 @@ export const parseResolvedCrossChainOrder = (resolvedOrder: string): ResolvedOrd
     originChainId: parseInt(resolvedOrder.slice(resolvedOrder.length - 1162, resolvedOrder.length - 1154), 16),
     user: `0x${resolvedOrder.slice(resolvedOrder.length - 1226, resolvedOrder.length - 1162)}`,
   }
+}
+
+const SPONSORED_FPC_SALT = new Fr(0)
+
+export async function getSponsoredFPCInstance(): Promise<ContractInstanceWithAddress> {
+  return await getContractInstanceFromDeployParams(SponsoredFPCContract.artifact, {
+    salt: SPONSORED_FPC_SALT,
+  })
+}
+
+export async function getSponsoredFPCAddress() {
+  return (await getSponsoredFPCInstance()).address
+}
+
+export async function getDeployedSponsoredFPCAddress(pxe: PXE) {
+  const fpc = await getSponsoredFPCAddress()
+  const contracts = await pxe.getContracts()
+  if (!contracts.find((c) => c.equals(fpc))) {
+    throw new Error("SponsoredFPC not deployed.")
+  }
+  return fpc
 }

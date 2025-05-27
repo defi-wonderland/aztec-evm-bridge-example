@@ -4,7 +4,7 @@ import { TokenContract, TokenContractArtifact } from "@aztec/noir-contracts.js/T
 import { Mutex } from "async-mutex"
 import { waitForTransactionReceipt } from "viem/actions"
 
-import { registerContract } from "../utils/aztec.js"
+import { registerContractWithoutInstance } from "../utils/aztec.js"
 import { AztecGateway7683Contract } from "../artifacts/AztecGateway7683/AztecGateway7683.js"
 import l2Gateway7683Abi from "../abis/l2Gateway7683.js"
 import {
@@ -18,12 +18,12 @@ import BaseService from "./base.service.js"
 import { hexToUintArray } from "../utils/bytes.js"
 
 import type { Chain, Log } from "viem"
-import type { Wallet } from "@aztec/aztec.js"
+import type { AccountWalletWithSecretKey } from "@aztec/aztec.js"
 import type { BaseServiceOpts } from "./base.service.js"
 import type MultiClient from "../MultiClient.js"
 
 export type OrderServiceOpts = BaseServiceOpts & {
-  aztecWallet: Wallet
+  aztecWallet: AccountWalletWithSecretKey
   aztecGatewayAddress: `0x${string}`
   evmMultiClient: MultiClient
   l2EvmChain: Chain
@@ -31,7 +31,7 @@ export type OrderServiceOpts = BaseServiceOpts & {
 }
 
 class OrderService extends BaseService {
-  aztecWallet: Wallet
+  aztecWallet: AccountWalletWithSecretKey
   aztecGatewayAddress: `0x${string}`
   evmMultiClient: MultiClient
   l2EvmChain: Chain
@@ -86,7 +86,7 @@ class OrderService extends BaseService {
 
       const orderIds = orders.map(({ orderId }) => orderId)
       const newOrdersStatus = await Promise.all(
-        orderIds.map((orderId) => gateway.methods.get_order_status(hexToUintArray(orderId)).simulate()),
+        orderIds.map((orderId) => gateway.methods.get_order_status(Fr.fromHexString(orderId)).simulate()),
       )
 
       const filledOrderIds = orderIds.filter((_, index) => newOrdersStatus[index] === ORDER_FILLED)
@@ -234,8 +234,7 @@ class OrderService extends BaseService {
 
       try {
         this.logger.info("registering token contract into the PXE ...")
-        await registerContract(AztecAddress.fromString(maxSpentToken), {
-          wallet: this.aztecWallet,
+        await registerContractWithoutInstance(AztecAddress.fromString(maxSpentToken), {
           artifact: TokenContractArtifact,
         })
       } catch (err) {

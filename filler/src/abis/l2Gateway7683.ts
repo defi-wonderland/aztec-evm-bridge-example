@@ -1309,7 +1309,7 @@ export default [
   },
   {
     type: "error",
-    name: "invalidOrderType",
+    name: "InvalidOrderType",
     inputs: [],
   },
 ]

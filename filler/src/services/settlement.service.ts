@@ -25,16 +25,15 @@ import forwarderAbi from "../abis/forwarder"
 import l2Gateway7683Abi from "../abis/l2Gateway7683"
 import anchorRegistryAbi from "../abis/anchorRegistry"
 import { AztecGateway7683Contract } from "../artifacts/AztecGateway7683/AztecGateway7683"
-import { hexToUintArray } from "../utils/bytes"
 
 import type { Chain } from "viem"
-import type { AztecNode, PXE, Wallet } from "@aztec/aztec.js"
+import type { AccountWalletWithSecretKey, AztecNode, PXE } from "@aztec/aztec.js"
 import type { BaseServiceOpts } from "./base.service"
 import type { Order } from "../types"
 import type MultiClient from "../MultiClient"
 
 export type SettlementServiceOpts = BaseServiceOpts & {
-  aztecWallet: Wallet
+  aztecWallet: AccountWalletWithSecretKey
   aztecGatewayAddress: `0x${string}`
   aztecNode: AztecNode
   beaconApiUrl: string
@@ -60,7 +59,7 @@ const getExecutionStateRootProof = (block: any): { proof: string[]; leaf: string
 }
 
 class SettlementService extends BaseService {
-  aztecWallet: Wallet
+  aztecWallet: AccountWalletWithSecretKey
   aztecGatewayAddress: `0x${string}`
   aztecNode: AztecNode
   beaconApiUrl: string
@@ -238,7 +237,7 @@ class SettlementService extends BaseService {
         this.aztecWallet,
       )
       const orderSettlementBlockNumber = await gateway.methods
-        .get_order_settlement_block_number(hexToUintArray(order.orderId))
+        .get_order_settlement_block_number(Fr.fromBufferReduce(Buffer.from(order.orderId.slice(2), "hex")))
         .simulate()
 
       const [l2ToL1MessageIndex, siblingPath] = await this.pxe.getL2ToL1MembershipWitness(
