@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.28;
 
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IOutbox} from "@aztec/contracts/core/interfaces/messagebridge/IOutbox.sol";
 import {IInbox, DataStructures} from "@aztec/contracts/core/interfaces/messagebridge/IInbox.sol";
 import {DataStructures} from "@aztec/contracts/core/libraries/DataStructures.sol";
@@ -9,7 +10,7 @@ import {Hash} from "@optimism/contracts/src/dispute/lib/Types.sol";
 import {StateValidator} from "./libs/StateValidator.sol";
 import {IForwarder} from "./interfaces/IForwarder.sol";
 
-contract Forwarder is IForwarder {
+contract Forwarder is IForwarder, Ownable {
     uint256 private constant L2_GATEWAY_FILLED_ORDERS_SLOT = 51;
     uint256 private constant L2_GATEWAY_REFUNDED_ORDERS_SLOT = 52;
     uint256 private constant AZTEC_VERSION = 4189337207;
@@ -20,21 +21,16 @@ contract Forwarder is IForwarder {
     address public immutable L2_GATEWAY;
     address public immutable AZTEC_INBOX;
     address public immutable AZTEC_OUTBOX;
-    bytes32 public immutable AZTEC_GATEWAY;
     address public immutable ANCHOR_STATE_REGISTRY;
+    bytes32 public AZTEC_GATEWAY_7683;
 
     mapping(bytes32 => bool) private _settledOrders;
     mapping(bytes32 => bool) private _refundedOrders;
 
-    constructor(
-        address l2Gateway,
-        address aztecInbox,
-        address aztecOutbox,
-        bytes32 aztecGateway,
-        address anchorStateRegistry
-    ) {
+    constructor(address l2Gateway, address aztecInbox, address aztecOutbox, address anchorStateRegistry)
+        Ownable(msg.sender)
+    {
         L2_GATEWAY = l2Gateway;
-        AZTEC_GATEWAY = aztecGateway;
         AZTEC_INBOX = aztecInbox;
         AZTEC_OUTBOX = aztecOutbox;
         ANCHOR_STATE_REGISTRY = anchorStateRegistry;
@@ -106,10 +102,14 @@ contract Forwarder is IForwarder {
     ) internal returns (bytes32) {
         bytes32 messageHash = sha256(message) >> 8; // Represent it as an Aztec field element (BN254 scalar, encoded as bytes32)
         require(messageHash == l2ToL1Message.content, InvalidContent());
-        require(l2ToL1Message.sender.actor == AZTEC_GATEWAY, InvalidSender());
+        require(l2ToL1Message.sender.actor == AZTEC_GATEWAY_7683, InvalidSender());
         // NOTE: recipient correctness is checked by Outbox
         IOutbox(AZTEC_OUTBOX).consume(l2ToL1Message, aztecBlockNumber, leafIndex, path);
         return messageHash;
+    }
+
+    function setAztecGateway7683(bytes32 aztecGateway7683) external onlyOwner {
+        AZTEC_GATEWAY_7683 = aztecGateway7683;
     }
 
     function _checkOrderStorageKey(bytes32 storageKey, bytes32 orderId, uint256 slot) internal pure {
@@ -127,7 +127,7 @@ contract Forwarder is IForwarder {
         );
         bytes32 messageHash = sha256(message);
         IInbox(AZTEC_INBOX).sendL2Message(
-            DataStructures.L2Actor({actor: AZTEC_GATEWAY, version: AZTEC_VERSION}), messageHash, SECRET_HASH
+            DataStructures.L2Actor({actor: AZTEC_GATEWAY_7683, version: AZTEC_VERSION}), messageHash, SECRET_HASH
         );
     }
 }

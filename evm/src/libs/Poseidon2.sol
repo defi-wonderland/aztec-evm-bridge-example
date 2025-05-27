@@ -32,20 +32,20 @@ library Poseidon2 {
     /**
      * Public API: best for single time use
      */
-    function hash_1(Field.Type m) internal pure returns (Field.Type) {
+    function hash_1(Field.Type m) public pure returns (Field.Type) {
         Field.Type[] memory inputs = new Field.Type[](1);
         inputs[0] = m;
         return hash_internal(load(), inputs, 1, false);
     }
 
-    function hash_2(Field.Type m1, Field.Type m2) internal pure returns (Field.Type) {
+    function hash_2(Field.Type m1, Field.Type m2) public pure returns (Field.Type) {
         Field.Type[] memory inputs = new Field.Type[](2);
         inputs[0] = m1;
         inputs[1] = m2;
         return hash_internal(load(), inputs, 2, false);
     }
 
-    function hash_3(Field.Type m1, Field.Type m2, Field.Type m3) internal pure returns (Field.Type) {
+    function hash_3(Field.Type m1, Field.Type m2, Field.Type m3) public pure returns (Field.Type) {
         Field.Type[] memory inputs = new Field.Type[](3);
         inputs[0] = m1;
         inputs[1] = m2;
@@ -54,7 +54,7 @@ library Poseidon2 {
     }
 
     function hash(Field.Type[] memory inputs, uint256 std_input_length, bool is_variable_length)
-        internal
+        public
         pure
         returns (Field.Type)
     {
@@ -64,14 +64,14 @@ library Poseidon2 {
     /**
      * Public API: best for multiple use in same call context
      */
-    function hash_1(Poseidon2.Constants memory constants, Field.Type m) internal pure returns (Field.Type) {
+    function hash_1(Poseidon2.Constants memory constants, Field.Type m) public pure returns (Field.Type) {
         Field.Type[] memory inputs = new Field.Type[](1);
         inputs[0] = m;
         return hash_internal(constants, inputs, 1, false);
     }
 
     function hash_2(Poseidon2.Constants memory constants, Field.Type m1, Field.Type m2)
-        internal
+        public
         pure
         returns (Field.Type)
     {
@@ -82,7 +82,7 @@ library Poseidon2 {
     }
 
     function hash_3(Poseidon2.Constants memory constants, Field.Type m1, Field.Type m2, Field.Type m3)
-        internal
+        public
         pure
         returns (Field.Type)
     {

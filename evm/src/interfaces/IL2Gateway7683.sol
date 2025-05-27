@@ -9,7 +9,7 @@ interface IL2Gateway7683 is IOriginSettler, IDestinationSettler {
     error InvalidState();
 
     event ForwarderSet(address forwarder);
-    event AztecGateway7683Set(address aztecGateway7683);
+    event AztecGateway7683Set(bytes32 aztecGateway7683);
 
     function settle(
         bytes calldata message,
@@ -19,5 +19,5 @@ interface IL2Gateway7683 is IOriginSettler, IDestinationSettler {
 
     function setForwarder(address forwarder) external;
 
-    function setAztecGateway7683(address aztecGateway7683) external;
+    function setAztecGateway7683(bytes32 aztecGateway7683) external;
 }

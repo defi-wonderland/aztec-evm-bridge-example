@@ -2,7 +2,6 @@
 pragma solidity ^0.8.28;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {TypeCasts} from "@hyperlane-xyz/libs/TypeCasts.sol";
 import {BasicSwap7683} from "./BasicSwap7683.sol";
 import {StateValidator} from "./libs/StateValidator.sol";
 import {BytesReader} from "./libs/BytesReader.sol";
@@ -17,7 +16,7 @@ contract L2Gateway7683 is IL2Gateway7683, BasicSwap7683, Ownable {
     bytes32 private constant SETTLE_ORDER_TYPE = sha256(abi.encodePacked("SETTLE_ORDER_TYPE"));
     bytes32 private constant REFUND_ORDER_TYPE = sha256(abi.encodePacked("REFUND_ORDER_TYPE"));
     address public forwarder;
-    address public aztecGateway7683;
+    bytes32 public aztecGateway7683;
 
     constructor(address permit2) BasicSwap7683(permit2) Ownable(msg.sender) {}
 
@@ -38,7 +37,7 @@ contract L2Gateway7683 is IL2Gateway7683, BasicSwap7683, Ownable {
         // If the order exists, it means it was resolved on its origin domain, and the originDomain field is already set correctly in _resolvedOrders.
         // As for the destination settler, we enforce that L2Gateway7683 stores the Aztec gateway address,
         // allowing us to validate destination orders by comparing against the known address of AztecGateway7683.
-        _handleSettleOrder(AZTEC_CHAIN_ID, TypeCasts.addressToBytes32(aztecGateway7683), orderId, receiver);
+        _handleSettleOrder(AZTEC_CHAIN_ID, aztecGateway7683, orderId, receiver);
     }
 
     function refund(
@@ -54,7 +53,7 @@ contract L2Gateway7683 is IL2Gateway7683, BasicSwap7683, Ownable {
         bytes32 orderId = message.readBytes32(32);
         require(orderType == REFUND_ORDER_TYPE, InvalidOrderType(orderId));
         // NOTE: same as within settle
-        _handleRefundOrder(AZTEC_CHAIN_ID, TypeCasts.addressToBytes32(aztecGateway7683), orderId);
+        _handleRefundOrder(AZTEC_CHAIN_ID, aztecGateway7683, orderId);
     }
 
     function setForwarder(address forwarder_) external onlyOwner {
@@ -62,7 +61,7 @@ contract L2Gateway7683 is IL2Gateway7683, BasicSwap7683, Ownable {
         emit ForwarderSet(forwarder_);
     }
 
-    function setAztecGateway7683(address aztecGateway7683_) external onlyOwner {
+    function setAztecGateway7683(bytes32 aztecGateway7683_) external onlyOwner {
         // NOTE: use the same gateway stored in the Forwarder
         aztecGateway7683 = aztecGateway7683_;
         emit AztecGateway7683Set(aztecGateway7683_);
