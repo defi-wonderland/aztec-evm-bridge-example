@@ -91,7 +91,10 @@ pub contract AztecGateway7683 {
             .enqueue(&mut context);
 
         let order_data = OrderData::decode(origin_data_bytes);
-        assert(poseidon2_hash([secret]) == Field::from_be_bytes(order_data.recipient), "Invalid secret");
+        assert(
+            poseidon2_hash([secret]) == Field::from_be_bytes(order_data.recipient),
+            "Invalid secret",
+        );
 
         // transfer from gateway public balance to user private balance
         let token = u8_32_to_aztec_address(order_data.output_token);
@@ -141,12 +144,12 @@ pub contract AztecGateway7683 {
             "Invalid destination domain",
         );
 
-        /*context.consume_l1_to_l2_message(
+        context.consume_l1_to_l2_message(
             _get_refund_content_hash(order_id_bytes),
             Field::from_be_bytes(SECRET),
             storage.config.read().portal,
             message_leaf_index,
-        );*/
+        );
 
         Token::at(u8_32_to_aztec_address(order_data.input_token))
             .transfer_in_public(
@@ -176,7 +179,10 @@ pub contract AztecGateway7683 {
 
         let order_data = OrderData::decode(origin_data_bytes);
         let order_type = order_data.order_type;
-        assert(poseidon2_hash([secret]) == Field::from_be_bytes(order_data.recipient), "Invalid secret");
+        assert(
+            poseidon2_hash([secret]) == Field::from_be_bytes(order_data.recipient),
+            "Invalid secret",
+        );
         assert(
             (order_type == PRIVATE_ORDER) | (order_type == PRIVATE_ORDER_WITH_HOOK),
             "Not a private order",
@@ -191,12 +197,12 @@ pub contract AztecGateway7683 {
             "Invalid destination domain",
         );
 
-        /*context.consume_l1_to_l2_message(
+        context.consume_l1_to_l2_message(
             _get_refund_content_hash(order_id_bytes),
             Field::from_be_bytes(SECRET),
             storage.config.read().portal,
             message_leaf_index,
-        );*/
+        );
 
         let token = u8_32_to_aztec_address(order_data.input_token);
         let partial_note = Token::at(token)
@@ -349,7 +355,8 @@ pub contract AztecGateway7683 {
         let nonce = Field::from_be_bytes(data.order_data.sender_nonce);
 
         assert(
-            (data.order_data.order_type == PRIVATE_ORDER) | (data.order_data.order_type == PRIVATE_ORDER_WITH_HOOK),
+            (data.order_data.order_type == PRIVATE_ORDER)
+                | (data.order_data.order_type == PRIVATE_ORDER_WITH_HOOK),
             "Not a private order",
         );
         assert(data.order_data.origin_domain == LOCAL_DOMAIN, "Invalid origin domain");
@@ -416,12 +423,12 @@ pub contract AztecGateway7683 {
             "Invalid destination domain",
         );
 
-        /*context.consume_l1_to_l2_message(
+        context.consume_l1_to_l2_message(
             _get_settle_content_hash(order_id_bytes, filler_data_bytes),
             Field::from_be_bytes(SECRET),
             storage.config.read().portal,
             message_leaf_index,
-        );*/
+        );
 
         // transfer from gateway public balance to user public balande
         Token::at(u8_32_to_aztec_address(order_data.input_token))
@@ -468,12 +475,12 @@ pub contract AztecGateway7683 {
             "Invalid destination domain",
         );
 
-        /*context.consume_l1_to_l2_message(
+        context.consume_l1_to_l2_message(
             _get_settle_content_hash(order_id_bytes, filler_data_bytes),
             Field::from_be_bytes(SECRET),
             storage.config.read().portal,
             message_leaf_index,
-        );*/
+        );
 
         let filler = u8_32_to_aztec_address(filler_data_bytes);
         let token = u8_32_to_aztec_address(order_data.input_token);
