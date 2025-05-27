@@ -1,8 +1,8 @@
 import { Fr, PXE, EthAddress, SponsoredFeePaymentMethod, Contract } from "@aztec/aztec.js"
 import { spawn } from "child_process"
 import { createEthereumChain, createExtendedL1Client, RollupContract } from "@aztec/ethereum"
-import { encodePacked, hexToBytes, padHex, sha256 } from "viem"
-import { sha256ToField } from "@aztec/foundation/crypto"
+import { hexToBytes, padHex, sha256 } from "viem"
+import { poseidon2Hash, sha256ToField } from "@aztec/foundation/crypto"
 import { SponsoredFPCContract } from "@aztec/noir-contracts.js/SponsoredFPC"
 import { TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
 
@@ -10,13 +10,14 @@ import { parseFilledLog, parseOpenLog, parseResolvedCrossChainOrder, parseSettle
 import { AztecGateway7683Contract, AztecGateway7683ContractArtifact } from "../../artifacts/AztecGateway7683.js"
 import { getWallet, getPXEs } from "../../../scripts/utils.js"
 import { getSponsoredFPCInstance } from "../../../scripts/fpc.js"
+import { OrderData } from "./OrderData.js"
 
 const MNEMONIC = "test test test test test test test test test test test junk"
 const PORTAL_ADDRESS = EthAddress.ZERO
 const SETTLE_ORDER_TYPE = "0x191ea776bd6e0cd56a6d44ba4aea2fec468b4a0b4c1d880d4025929eeb615d0d"
 const ORDER_DATA_TYPE = "0xf00c3bf60c73eb97097f1c9835537da014e0b755fe94b25d7ac8401df66716a0"
-const SECRET = padHex(("0x" + Buffer.from("secret", "utf-8").toString("hex")) as `0x${string}`)
-const SECRET_HASH = sha256(SECRET)
+const SECRET = Fr.random()
+const SECRET_HASH = await poseidon2Hash([SECRET])
 const AZTEC_7683_DOMAIN = 999999
 
 const PUBLIC_ORDER = 0
@@ -28,7 +29,7 @@ const TOKEN_OUT = "0x33333333333333333333333333333333333333333333333333333333333
 const AMOUNT_OUT_ZERO = 0n
 const AMOUNT_IN_ZERO = 0n
 // const MAINNET_CHAIN_ID = 1
-const L2_CHAIN_ID = 11155420
+const L2_DOMAIN = 11155420
 const FILL_DEADLINE = 2 ** 32 - 1
 const DESTINATION_SETTLER_EVM_L2 = EthAddress.ZERO
 const DATA = "0x5555555555555555555555555555555555555555555555555555555555555555"
@@ -54,12 +55,7 @@ const setup = async (pxes: PXE[]) => {
   await user.registerSender(deployer.getAddress())
   await filler.registerSender(deployer.getAddress())
 
-  const gateway = await AztecGateway7683Contract.deploy(
-    deployer,
-    DESTINATION_SETTLER_EVM_L2,
-    L2_CHAIN_ID,
-    PORTAL_ADDRESS,
-  )
+  const gateway = await AztecGateway7683Contract.deploy(deployer, DESTINATION_SETTLER_EVM_L2, L2_DOMAIN, PORTAL_ADDRESS)
     .send({
       contractAddressSalt: Fr.random(),
       universalDeploy: false,
@@ -172,45 +168,29 @@ describe("AztecGateway7683", () => {
       .send({ fee: { paymentMethod } })
       .wait()
 
-    const orderData = encodePacked(
-      [
-        "bytes32",
-        "bytes32",
-        "bytes32",
-        "bytes32",
-        "uint256",
-        "uint256",
-        "uint256",
-        "uint32",
-        "uint32",
-        "bytes32",
-        "uint32",
-        "uint8",
-        "bytes32",
-      ],
-      [
-        user.getAddress().toString(),
-        RECIPIENT,
-        token.address.toString(),
-        TOKEN_OUT,
-        amountIn,
-        AMOUNT_OUT_ZERO,
-        nonce.toBigInt(),
-        AZTEC_7683_DOMAIN,
-        L2_CHAIN_ID,
-        padHex(DESTINATION_SETTLER_EVM_L2.toString()),
-        FILL_DEADLINE,
-        PUBLIC_ORDER,
-        DATA,
-      ],
-    )
+    const orderData = new OrderData({
+      sender: user.getAddress().toString(),
+      recipient: RECIPIENT,
+      inputToken: token.address.toString(),
+      outputToken: TOKEN_OUT,
+      amountIn,
+      amountOut: AMOUNT_OUT_ZERO,
+      senderNonce: nonce.toBigInt(),
+      originDomain: AZTEC_7683_DOMAIN,
+      destinationDomain: L2_DOMAIN,
+      destinationSettler: padHex(DESTINATION_SETTLER_EVM_L2.toString()),
+      fillDeadline: FILL_DEADLINE,
+      orderType: PUBLIC_ORDER,
+      data: DATA,
+    })
+    const orderId = await orderData.id()
 
     let fromBlock = await pxe1.getBlockNumber()
     await gateway
       .withWallet(user)
       .methods.open({
         fill_deadline: FILL_DEADLINE,
-        order_data: Array.from(hexToBytes(orderData)),
+        order_data: Array.from(hexToBytes(orderData.encode())),
         order_data_type: Array.from(hexToBytes(ORDER_DATA_TYPE)),
       })
       .send({ fee: { paymentMethod } })
@@ -224,15 +204,15 @@ describe("AztecGateway7683", () => {
 
     const { resolvedOrder } = parseOpenLog(logs[0].log.fields, logs[1].log.fields)
     const parsedResolvedCrossChainOrder = parseResolvedCrossChainOrder(resolvedOrder)
-    expect(parsedResolvedCrossChainOrder.orderId).toBe(sha256(orderData))
+    expect(parsedResolvedCrossChainOrder.orderId).toBe(orderId.toString())
     expect(parsedResolvedCrossChainOrder.fillDeadline).toBe(FILL_DEADLINE)
     expect(parsedResolvedCrossChainOrder.originChainId).toBe(AZTEC_7683_DOMAIN)
-    expect(parsedResolvedCrossChainOrder.fillInstructions[0].originData).toBe(orderData)
-    expect(parsedResolvedCrossChainOrder.fillInstructions[0].destinationChainId).toBe(L2_CHAIN_ID)
+    expect(parsedResolvedCrossChainOrder.fillInstructions[0].originData).toBe(orderData.encode())
+    expect(parsedResolvedCrossChainOrder.fillInstructions[0].destinationChainId).toBe(L2_DOMAIN)
     expect(parsedResolvedCrossChainOrder.fillInstructions[0].destinationSettler).toBe(
       padHex(DESTINATION_SETTLER_EVM_L2.toString()),
     )
-    expect(parsedResolvedCrossChainOrder.maxSpent[0].chainId).toBe(L2_CHAIN_ID)
+    expect(parsedResolvedCrossChainOrder.maxSpent[0].chainId).toBe(L2_DOMAIN)
     expect(parsedResolvedCrossChainOrder.maxSpent[0].amount).toBe(AMOUNT_OUT_ZERO)
     expect(parsedResolvedCrossChainOrder.maxSpent[0].recipient).toBe(RECIPIENT)
     expect(parsedResolvedCrossChainOrder.maxSpent[0].token).toBe(TOKEN_OUT)
@@ -247,7 +227,7 @@ describe("AztecGateway7683", () => {
       .withWallet(filler)
       .methods.settle(
         Array.from(hexToBytes(parsedResolvedCrossChainOrder.orderId as `0x${string}`)),
-        Array.from(hexToBytes(orderData)),
+        Array.from(hexToBytes(orderData.encode())),
         Array.from(hexToBytes(filler.getAddress().toString())),
         0n, // TODO
       )
@@ -279,45 +259,29 @@ describe("AztecGateway7683", () => {
       action: token.withWallet(user).methods.transfer_to_public(user.getAddress(), gateway.address, amountIn, nonce),
     })
 
-    const orderData = encodePacked(
-      [
-        "bytes32",
-        "bytes32",
-        "bytes32",
-        "bytes32",
-        "uint256",
-        "uint256",
-        "uint256",
-        "uint32",
-        "uint32",
-        "bytes32",
-        "uint32",
-        "uint8",
-        "bytes32",
-      ],
-      [
-        PRIVATE_SENDER,
-        RECIPIENT,
-        token.address.toString(),
-        TOKEN_OUT,
-        amountIn,
-        AMOUNT_OUT_ZERO,
-        nonce.toBigInt(),
-        AZTEC_7683_DOMAIN,
-        L2_CHAIN_ID,
-        padHex(DESTINATION_SETTLER_EVM_L2.toString()),
-        FILL_DEADLINE,
-        PRIVATE_ORDER,
-        DATA,
-      ],
-    )
+    const orderData = new OrderData({
+      sender: PRIVATE_SENDER,
+      recipient: RECIPIENT,
+      inputToken: token.address.toString(),
+      outputToken: TOKEN_OUT,
+      amountIn,
+      amountOut: AMOUNT_OUT_ZERO,
+      senderNonce: nonce.toBigInt(),
+      originDomain: AZTEC_7683_DOMAIN,
+      destinationDomain: L2_DOMAIN,
+      destinationSettler: padHex(DESTINATION_SETTLER_EVM_L2.toString()),
+      fillDeadline: FILL_DEADLINE,
+      orderType: PRIVATE_ORDER,
+      data: DATA,
+    })
+    const orderId = await orderData.id()
 
     let fromBlock = await pxe1.getBlockNumber()
     await gateway
       .withWallet(user)
       .methods.open_private({
         fill_deadline: FILL_DEADLINE,
-        order_data: Array.from(hexToBytes(orderData)),
+        order_data: Array.from(hexToBytes(orderData.encode())),
         order_data_type: Array.from(hexToBytes(ORDER_DATA_TYPE)),
       })
       .with({
@@ -333,15 +297,15 @@ describe("AztecGateway7683", () => {
     })
     const { resolvedOrder } = parseOpenLog(logs[0].log.fields, logs[1].log.fields)
     const parsedResolvedCrossChainOrder = parseResolvedCrossChainOrder(resolvedOrder)
-    expect(parsedResolvedCrossChainOrder.orderId).toBe(sha256(orderData))
+    expect(parsedResolvedCrossChainOrder.orderId).toBe(orderId.toString())
     expect(parsedResolvedCrossChainOrder.fillDeadline).toBe(FILL_DEADLINE)
     expect(parsedResolvedCrossChainOrder.originChainId).toBe(AZTEC_7683_DOMAIN)
-    expect(parsedResolvedCrossChainOrder.fillInstructions[0].originData).toBe(orderData)
-    expect(parsedResolvedCrossChainOrder.fillInstructions[0].destinationChainId).toBe(L2_CHAIN_ID)
+    expect(parsedResolvedCrossChainOrder.fillInstructions[0].originData).toBe(orderData.encode())
+    expect(parsedResolvedCrossChainOrder.fillInstructions[0].destinationChainId).toBe(L2_DOMAIN)
     expect(parsedResolvedCrossChainOrder.fillInstructions[0].destinationSettler).toBe(
       padHex(DESTINATION_SETTLER_EVM_L2.toString()),
     )
-    expect(parsedResolvedCrossChainOrder.maxSpent[0].chainId).toBe(L2_CHAIN_ID)
+    expect(parsedResolvedCrossChainOrder.maxSpent[0].chainId).toBe(L2_DOMAIN)
     expect(parsedResolvedCrossChainOrder.maxSpent[0].amount).toBe(AMOUNT_OUT_ZERO)
     expect(parsedResolvedCrossChainOrder.maxSpent[0].recipient).toBe(RECIPIENT)
     expect(parsedResolvedCrossChainOrder.maxSpent[0].token).toBe(TOKEN_OUT)
@@ -356,7 +320,7 @@ describe("AztecGateway7683", () => {
       .withWallet(filler)
       .methods.settle_private(
         Array.from(hexToBytes(parsedResolvedCrossChainOrder.orderId as `0x${string}`)),
-        Array.from(hexToBytes(orderData)),
+        Array.from(hexToBytes(orderData.encode())),
         Array.from(hexToBytes(filler.getAddress().toString())),
         0n, // TODO
       )
@@ -383,40 +347,23 @@ describe("AztecGateway7683", () => {
 
     const amountOut = 100n
     const nonce = Fr.random()
-    const originData = encodePacked(
-      [
-        "bytes32",
-        "bytes32",
-        "bytes32",
-        "bytes32",
-        "uint256",
-        "uint256",
-        "uint256",
-        "uint32",
-        "uint32",
-        "bytes32",
-        "uint32",
-        "uint8",
-        "bytes32",
-      ],
-      [
-        deployer.getAddress().toString(),
-        user.getAddress().toString(),
-        TOKEN_IN,
-        token.address.toString(),
-        AMOUNT_IN_ZERO,
-        amountOut,
-        nonce.toBigInt(),
-        L2_CHAIN_ID,
-        AZTEC_7683_DOMAIN,
-        padHex(gateway.address.toString()),
-        FILL_DEADLINE,
-        PUBLIC_ORDER,
-        DATA,
-      ],
-    )
+    const orderData = new OrderData({
+      sender: deployer.getAddress().toString(),
+      recipient: user.getAddress().toString(),
+      inputToken: TOKEN_IN,
+      outputToken: token.address.toString(),
+      amountIn: AMOUNT_IN_ZERO,
+      amountOut,
+      senderNonce: nonce.toBigInt(),
+      originDomain: L2_DOMAIN,
+      destinationDomain: AZTEC_7683_DOMAIN,
+      destinationSettler: padHex(gateway.address.toString()),
+      fillDeadline: FILL_DEADLINE,
+      orderType: PUBLIC_ORDER,
+      data: DATA,
+    })
+    const orderId = await orderData.id()
 
-    const orderId = sha256(originData)
     const fillerData = filler.getAddress().toString()
     await (
       await filler.setPublicAuthWit(
@@ -436,8 +383,8 @@ describe("AztecGateway7683", () => {
     await gateway
       .withWallet(filler)
       .methods.fill(
-        Array.from(hexToBytes(orderId)),
-        Array.from(hexToBytes(originData)),
+        Array.from(hexToBytes(orderId.toString())),
+        Array.from(hexToBytes(orderData.encode())),
         Array.from(hexToBytes(fillerData)),
       )
       .send({
@@ -451,13 +398,13 @@ describe("AztecGateway7683", () => {
       contractAddress: gateway.address,
     })
     const parsedLog = parseFilledLog(logs[0].log.fields)
-    expect(orderId).toBe(parsedLog.orderId)
-    expect(originData).toBe(parsedLog.originData)
+    expect(orderId.toString()).toBe(parsedLog.orderId)
+    expect(orderData.encode()).toBe(parsedLog.originData)
     expect(fillerData).toBe(parsedLog.fillerData)
 
     const content = sha256ToField([
       Buffer.from(SETTLE_ORDER_TYPE.slice(2), "hex"),
-      Buffer.from(orderId.slice(2), "hex"),
+      Buffer.from(orderId.toString().slice(2), "hex"),
       Buffer.from(filler.getAddress().toString().slice(2), "hex"),
     ])
 
@@ -469,9 +416,7 @@ describe("AztecGateway7683", () => {
       content.toBuffer(),
     ])
 
-    const orderSettlementBlockNumber = await gateway.methods
-      .get_order_settlement_block_number(Fr.fromBufferReduce(Buffer.from(orderId.slice(2), "hex")))
-      .simulate()
+    const orderSettlementBlockNumber = await gateway.methods.get_order_settlement_block_number(orderId).simulate()
     const [l2ToL1MessageIndex, siblingPath] = await pxe1.getL2ToL1MembershipWitness(
       parseInt(orderSettlementBlockNumber),
       l2ToL1Message,
@@ -488,40 +433,22 @@ describe("AztecGateway7683", () => {
 
     const amountOut = 100n
     const nonce = Fr.random()
-    const originData = encodePacked(
-      [
-        "bytes32",
-        "bytes32",
-        "bytes32",
-        "bytes32",
-        "uint256",
-        "uint256",
-        "uint256",
-        "uint32",
-        "uint32",
-        "bytes32",
-        "uint32",
-        "uint8",
-        "bytes32",
-      ],
-      [
-        PRIVATE_SENDER,
-        SECRET_HASH,
-        TOKEN_IN,
-        token.address.toString(),
-        AMOUNT_IN_ZERO,
-        amountOut,
-        nonce.toBigInt(),
-        L2_CHAIN_ID,
-        AZTEC_7683_DOMAIN,
-        padHex(gateway.address.toString()),
-        FILL_DEADLINE,
-        PRIVATE_ORDER,
-        DATA,
-      ],
-    )
-
-    const orderId = sha256(originData)
+    const orderData = new OrderData({
+      sender: PRIVATE_SENDER,
+      recipient: SECRET_HASH.toString(),
+      inputToken: TOKEN_IN,
+      outputToken: token.address.toString(),
+      amountIn: AMOUNT_IN_ZERO,
+      amountOut,
+      senderNonce: nonce.toBigInt(),
+      originDomain: L2_DOMAIN,
+      destinationDomain: AZTEC_7683_DOMAIN,
+      destinationSettler: padHex(gateway.address.toString()),
+      fillDeadline: FILL_DEADLINE,
+      orderType: PRIVATE_ORDER,
+      data: DATA,
+    })
+    const orderId = await orderData.id()
     const fillerData = filler.getAddress().toString()
 
     const witness = await filler.createAuthWit({
@@ -535,8 +462,8 @@ describe("AztecGateway7683", () => {
     await gateway
       .withWallet(filler)
       .methods.fill_private(
-        Array.from(hexToBytes(orderId)),
-        Array.from(hexToBytes(originData)),
+        Array.from(hexToBytes(orderId.toString())),
+        Array.from(hexToBytes(orderData.encode())),
         Array.from(hexToBytes(fillerData)),
       )
       .with({
@@ -553,16 +480,16 @@ describe("AztecGateway7683", () => {
       contractAddress: gateway.address,
     })
     const parsedLog = parseFilledLog(logs[0].log.fields)
-    expect(orderId).toBe(parsedLog.orderId)
-    expect(originData).toBe(parsedLog.originData)
+    expect(orderId.toString()).toBe(parsedLog.orderId)
+    expect(orderData.encode()).toBe(parsedLog.originData)
     expect(fillerData).toBe(parsedLog.fillerData)
 
     await gateway
       .withWallet(user)
       .methods.claim_private(
-        Array.from(hexToBytes(SECRET)),
-        Array.from(hexToBytes(orderId)),
-        Array.from(hexToBytes(originData)),
+        SECRET,
+        Array.from(hexToBytes(orderId.toString())),
+        Array.from(hexToBytes(orderData.encode())),
         Array.from(hexToBytes(fillerData)),
       )
       .send({
@@ -572,7 +499,7 @@ describe("AztecGateway7683", () => {
 
     const content = sha256ToField([
       Buffer.from(SETTLE_ORDER_TYPE.slice(2), "hex"),
-      Buffer.from(orderId.slice(2), "hex"),
+      orderId,
       Buffer.from(fillerData.slice(2), "hex"),
     ])
 
@@ -584,10 +511,7 @@ describe("AztecGateway7683", () => {
       content.toBuffer(),
     ])
 
-    const orderSettlementBlockNumber = await gateway.methods
-      .get_order_settlement_block_number(Fr.fromBufferReduce(Buffer.from(orderId.slice(2), "hex")))
-      .simulate()
-
+    const orderSettlementBlockNumber = await gateway.methods.get_order_settlement_block_number(orderId).simulate()
     const [l2ToL1MessageIndex, siblingPath] = await pxe1.getL2ToL1MembershipWitness(
       parseInt(orderSettlementBlockNumber),
       l2ToL1Message,
@@ -617,45 +541,28 @@ describe("AztecGateway7683", () => {
       .send({ fee: { paymentMethod } })
       .wait()
 
-    const orderData = encodePacked(
-      [
-        "bytes32",
-        "bytes32",
-        "bytes32",
-        "bytes32",
-        "uint256",
-        "uint256",
-        "uint256",
-        "uint32",
-        "uint32",
-        "bytes32",
-        "uint32",
-        "uint8",
-        "bytes32",
-      ],
-      [
-        user.getAddress().toString(),
-        RECIPIENT,
-        token.address.toString(),
-        TOKEN_OUT,
-        amountIn,
-        AMOUNT_OUT_ZERO,
-        nonce.toBigInt(),
-        AZTEC_7683_DOMAIN,
-        L2_CHAIN_ID,
-        padHex(DESTINATION_SETTLER_EVM_L2.toString()),
-        FILL_DEADLINE,
-        PUBLIC_ORDER,
-        DATA,
-      ],
-    )
-    const orderId = sha256(orderData)
+    const orderData = new OrderData({
+      sender: user.getAddress().toString(),
+      recipient: RECIPIENT,
+      inputToken: token.address.toString(),
+      outputToken: TOKEN_OUT,
+      amountIn,
+      amountOut: AMOUNT_OUT_ZERO,
+      senderNonce: nonce.toBigInt(),
+      originDomain: AZTEC_7683_DOMAIN,
+      destinationDomain: L2_DOMAIN,
+      destinationSettler: padHex(DESTINATION_SETTLER_EVM_L2.toString()),
+      fillDeadline: FILL_DEADLINE,
+      orderType: PUBLIC_ORDER,
+      data: DATA,
+    })
+    const orderId = await orderData.id()
 
     await gateway
       .withWallet(user)
       .methods.open({
         fill_deadline: FILL_DEADLINE,
-        order_data: Array.from(hexToBytes(orderData)),
+        order_data: Array.from(hexToBytes(orderData.encode())),
         order_data_type: Array.from(hexToBytes(ORDER_DATA_TYPE)),
       })
       .send({ fee: { paymentMethod } })
@@ -666,7 +573,11 @@ describe("AztecGateway7683", () => {
     const balancePre = await token.withWallet(user).methods.balance_of_public(user.getAddress()).simulate()
     await gateway
       .withWallet(user)
-      .methods.claim_refund(Array.from(hexToBytes(orderData)), Array.from(hexToBytes(orderId)), leafIndex)
+      .methods.claim_refund(
+        Array.from(hexToBytes(orderId.toString())),
+        Array.from(hexToBytes(orderData.encode())),
+        leafIndex,
+      )
       .send({ fee: { paymentMethod } })
       .wait()
     const balancePost = await token.withWallet(user).methods.balance_of_public(user.getAddress()).simulate()
@@ -684,45 +595,28 @@ describe("AztecGateway7683", () => {
       action: token.withWallet(user).methods.transfer_to_public(user.getAddress(), gateway.address, amountIn, nonce),
     })
 
-    const orderData = encodePacked(
-      [
-        "bytes32",
-        "bytes32",
-        "bytes32",
-        "bytes32",
-        "uint256",
-        "uint256",
-        "uint256",
-        "uint32",
-        "uint32",
-        "bytes32",
-        "uint32",
-        "uint8",
-        "bytes32",
-      ],
-      [
-        PRIVATE_SENDER,
-        SECRET_HASH,
-        token.address.toString(),
-        TOKEN_OUT,
-        amountIn,
-        AMOUNT_OUT_ZERO,
-        nonce.toBigInt(),
-        AZTEC_7683_DOMAIN,
-        L2_CHAIN_ID,
-        padHex(DESTINATION_SETTLER_EVM_L2.toString()),
-        FILL_DEADLINE,
-        PRIVATE_ORDER,
-        DATA,
-      ],
-    )
-    const orderId = sha256(orderData)
+    const orderData = new OrderData({
+      sender: PRIVATE_SENDER,
+      recipient: SECRET_HASH.toString(),
+      inputToken: token.address.toString(),
+      outputToken: TOKEN_OUT,
+      amountIn,
+      amountOut: AMOUNT_OUT_ZERO,
+      senderNonce: nonce.toBigInt(),
+      originDomain: AZTEC_7683_DOMAIN,
+      destinationDomain: L2_DOMAIN,
+      destinationSettler: padHex(DESTINATION_SETTLER_EVM_L2.toString()),
+      fillDeadline: FILL_DEADLINE,
+      orderType: PRIVATE_ORDER,
+      data: DATA,
+    })
+    const orderId = await orderData.id()
 
     await gateway
       .withWallet(user)
       .methods.open_private({
         fill_deadline: FILL_DEADLINE,
-        order_data: Array.from(hexToBytes(orderData)),
+        order_data: Array.from(hexToBytes(orderData.encode())),
         order_data_type: Array.from(hexToBytes(ORDER_DATA_TYPE)),
       })
       .with({
@@ -737,9 +631,9 @@ describe("AztecGateway7683", () => {
     await gateway
       .withWallet(user)
       .methods.claim_refund_private(
-        Array.from(hexToBytes(SECRET)),
-        Array.from(hexToBytes(orderData)),
-        Array.from(hexToBytes(orderId)),
+        SECRET,
+        Array.from(hexToBytes(orderId.toString())),
+        Array.from(hexToBytes(orderData.encode())),
         leafIndex,
       )
       .with({

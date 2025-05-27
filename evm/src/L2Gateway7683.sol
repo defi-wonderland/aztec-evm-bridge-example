@@ -33,7 +33,7 @@ contract L2Gateway7683 is IL2Gateway7683, BasicSwap7683, Ownable {
         bytes32 orderType = message.readBytes32(0);
         bytes32 orderId = message.readBytes32(32);
         bytes32 receiver = message.readBytes32(64); // filler data
-        require(orderType == SETTLE_ORDER_TYPE, invalidOrderType());
+        require(orderType == SETTLE_ORDER_TYPE, InvalidOrderType(orderType));
         // NOTE: Checking the source chain ID here is unnecessary because _checkOrderEligibility reads directly from storage.
         // If the order exists, it means it was resolved on its origin domain, and the originDomain field is already set correctly in _resolvedOrders.
         // As for the destination settler, we enforce that L2Gateway7683 stores the Aztec gateway address,
@@ -52,7 +52,7 @@ contract L2Gateway7683 is IL2Gateway7683, BasicSwap7683, Ownable {
         _verifyForwarderProof(message, stateProofParams, accountProofParams, FORWARDER_REFUNED_ORDERS_SLOT);
         bytes32 orderType = message.readBytes32(0);
         bytes32 orderId = message.readBytes32(32);
-        require(orderType == REFUND_ORDER_TYPE, invalidOrderType());
+        require(orderType == REFUND_ORDER_TYPE, InvalidOrderType(orderId));
         // NOTE: same as within settle
         _handleRefundOrder(AZTEC_CHAIN_ID, TypeCasts.addressToBytes32(aztecGateway7683), orderId);
     }

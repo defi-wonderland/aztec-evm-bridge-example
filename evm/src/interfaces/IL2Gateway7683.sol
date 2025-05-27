@@ -7,7 +7,6 @@ interface IL2Gateway7683 is IOriginSettler, IDestinationSettler {
     error InvalidStorageKey();
     error InvalidStorageValue();
     error InvalidState();
-    error invalidOrderType();
 
     event ForwarderSet(address forwarder);
     event AztecGateway7683Set(address aztecGateway7683);

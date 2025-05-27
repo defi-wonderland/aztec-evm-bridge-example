@@ -2,6 +2,8 @@
 pragma solidity ^0.8.28;
 
 import {BytesReader} from "./BytesReader.sol";
+import {Poseidon2} from "./Poseidon2.sol";
+import {Field} from "./Field.sol";
 
 struct OrderData {
     bytes32 sender;
@@ -52,7 +54,21 @@ library OrderEncoder {
     }
 
     function id(OrderData memory order) internal pure returns (bytes32) {
-        return sha256(encode(order));
+        Field.Type[] memory inputs = new Field.Type[](13);
+        inputs[0] = Field.toFieldReduce(order.sender);
+        inputs[1] = Field.toFieldReduce(order.recipient);
+        inputs[2] = Field.toFieldReduce(order.inputToken);
+        inputs[3] = Field.toFieldReduce(order.outputToken);
+        inputs[4] = Field.toFieldReduce(order.amountIn);
+        inputs[5] = Field.toFieldReduce(order.amountOut);
+        inputs[6] = Field.toFieldReduce(order.senderNonce);
+        inputs[7] = Field.toField(order.originDomain);
+        inputs[8] = Field.toField(order.destinationDomain);
+        inputs[9] = Field.toFieldReduce(order.destinationSettler);
+        inputs[10] = Field.toField(order.fillDeadline);
+        inputs[11] = Field.toField(order.orderType);
+        inputs[12] = Field.toFieldReduce(order.data);
+        return Field.toBytes32(Poseidon2.hash(inputs, inputs.length, false));
     }
 
     function encode(OrderData memory order) internal pure returns (bytes memory) {

@@ -1,5 +1,5 @@
 use crate::utils::u8_4_to_u32;
-use dep::aztec::protocol_types::traits::{Deserialize, Serialize};
+use dep::aztec::protocol_types::{hash::poseidon2_hash, traits::{Deserialize, Serialize}};
 
 pub global ORDER_DATA_LENGTH: u32 = 301;
 pub global ORDER_DATA_TYPE: [u8; 32] = [
@@ -60,6 +60,24 @@ impl OrderData {
             order_type,
             data,
         }
+    }
+
+    pub fn id(self: Self) -> Field {
+        let mut fields: [Field; 13] = [0; 13];
+        fields[0] = Field::from_be_bytes(self.sender);
+        fields[1] = Field::from_be_bytes(self.recipient);
+        fields[2] = Field::from_be_bytes(self.input_token);
+        fields[3] = Field::from_be_bytes(self.output_token);
+        fields[4] = Field::from_be_bytes(self.amount_in);
+        fields[5] = Field::from_be_bytes(self.amount_out);
+        fields[6] = Field::from_be_bytes(self.sender_nonce);
+        fields[7] = self.origin_domain as Field;
+        fields[8] = self.destination_domain as Field;
+        fields[9] = Field::from_be_bytes(self.destination_settler);
+        fields[10] = self.fill_deadline as Field;
+        fields[11] = self.order_type as Field;
+        fields[12] = Field::from_be_bytes(self.data);
+        poseidon2_hash(fields)
     }
 }
 

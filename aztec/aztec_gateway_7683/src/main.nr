@@ -30,7 +30,7 @@ pub contract AztecGateway7683 {
     use crate::{
         config::Config,
         types::{
-            events::{Filled, Open/*, Settled*/},
+            events::{Filled, Open, Settled},
             helpers::InternalRCOParams,
             onchain_cross_chain_order::OnchainCrossChainOrder,
             order_data::{
@@ -48,7 +48,7 @@ pub contract AztecGateway7683 {
     use dep::aztec::{
         macros::{functions::{initializer, internal, private, public, view}, storage::storage},
         prelude::{AztecAddress, EthAddress, Map, PublicImmutable, PublicMutable},
-        protocol_types::{hash::sha256_to_field, traits::{Packable, Serialize}},
+        protocol_types::{hash::{poseidon2_hash, sha256_to_field}, traits::{Packable, Serialize}},
     };
     use token::Token;
 
@@ -56,7 +56,6 @@ pub contract AztecGateway7683 {
     struct Storage<Context> {
         config: PublicImmutable<Config, Context>,
         claimable_orders: Map<Field, PublicMutable<Field, Context>, Context>,
-        open_orders: Map<Field, PublicMutable<Field, Context>, Context>,
         order_status: Map<Field, PublicMutable<Field, Context>, Context>,
         used_nonces: Map<AztecAddress, Map<Field, PublicMutable<bool, Context>, Context>, Context>,
         orders_settlement_block_numbers: Map<Field, PublicMutable<Field, Context>, Context>,
@@ -70,12 +69,14 @@ pub contract AztecGateway7683 {
 
     #[private]
     fn claim_private(
-        secret: [u8; 32],
+        secret: Field,
         order_id_bytes: [u8; 32],
         origin_data_bytes: [u8; ORDER_DATA_LENGTH],
         filler_data_bytes: [u8; 32],
     ) {
         let order_id = Field::from_be_bytes(order_id_bytes);
+        let order_data = OrderData::decode(origin_data_bytes);
+        assert(order_data.id() == order_id, "Invalid id");
 
         AztecGateway7683::at(context.this_address())
             ._assert_order_status_private(order_id, FILLED_PRIVATELY)
@@ -85,12 +86,12 @@ pub contract AztecGateway7683 {
         AztecGateway7683::at(context.this_address())
             ._check_if_order_is_claimable_private(
                 order_id,
-                sha256_to_field(_get_order_pre_image(origin_data_bytes, filler_data_bytes)),
+                _get_claimable_order_commitment(order_id, filler_data_bytes),
             )
             .enqueue(&mut context);
 
         let order_data = OrderData::decode(origin_data_bytes);
-        assert(sha256::digest(secret) == order_data.recipient, "Invalid secret");
+        assert(poseidon2_hash([secret]) == Field::from_be_bytes(order_data.recipient), "Invalid secret");
 
         // transfer from gateway public balance to user private balance
         let token = u8_32_to_aztec_address(order_data.output_token);
@@ -115,17 +116,16 @@ pub contract AztecGateway7683 {
 
     #[public]
     fn claim_refund(
-        order_data_bytes: [u8; ORDER_DATA_LENGTH],
         order_id_bytes: [u8; 32],
+        order_data_bytes: [u8; ORDER_DATA_LENGTH],
         message_leaf_index: Field,
     ) {
         let order_id = Field::from_be_bytes(order_id_bytes);
+        let order_data = OrderData::decode(order_data_bytes);
+        assert(order_data.id() == order_id, "Invalid id");
         assert(storage.order_status.at(order_id).read() == OPENED, "Order not opened");
-        let order_commitment = _get_order_commitment(order_data_bytes);
-        assert(storage.open_orders.at(order_id).read() == order_commitment, "Invalid order");
         storage.order_status.at(order_id).write(REFUNDED);
 
-        let order_data = OrderData::decode(order_data_bytes);
         assert(
             (order_data.order_type == PUBLIC_ORDER)
                 | (order_data.order_type == PUBLIC_ORDER_WITH_HOOK),
@@ -141,12 +141,12 @@ pub contract AztecGateway7683 {
             "Invalid destination domain",
         );
 
-        context.consume_l1_to_l2_message(
+        /*context.consume_l1_to_l2_message(
             _get_refund_content_hash(order_id_bytes),
             Field::from_be_bytes(SECRET),
             storage.config.read().portal,
             message_leaf_index,
-        );
+        );*/
 
         Token::at(u8_32_to_aztec_address(order_data.input_token))
             .transfer_in_public(
@@ -161,19 +161,22 @@ pub contract AztecGateway7683 {
 
     #[private]
     fn claim_refund_private(
-        secret: [u8; 32],
-        origin_data_bytes: [u8; ORDER_DATA_LENGTH],
+        secret: Field,
         order_id_bytes: [u8; 32],
+        origin_data_bytes: [u8; ORDER_DATA_LENGTH],
         message_leaf_index: Field,
     ) {
-        let order_commitment = _get_order_commitment(origin_data_bytes);
-        AztecGateway7683::at(context.this_address())
-            ._check_refund_private(order_commitment, order_id_bytes)
-            .enqueue(&mut context);
+        let order_id = Field::from_be_bytes(order_id_bytes);
+        let order_data = OrderData::decode(origin_data_bytes);
+        assert(order_data.id() == order_id, "Invalid id");
+
+        AztecGateway7683::at(context.this_address())._check_refund_private(order_id).enqueue(
+            &mut context,
+        );
 
         let order_data = OrderData::decode(origin_data_bytes);
         let order_type = order_data.order_type;
-        assert(sha256::digest(secret) == order_data.recipient, "Invalid secret");
+        assert(poseidon2_hash([secret]) == Field::from_be_bytes(order_data.recipient), "Invalid secret");
         assert(
             (order_type == PRIVATE_ORDER) | (order_type == PRIVATE_ORDER_WITH_HOOK),
             "Not a private order",
@@ -188,12 +191,12 @@ pub contract AztecGateway7683 {
             "Invalid destination domain",
         );
 
-        context.consume_l1_to_l2_message(
+        /*context.consume_l1_to_l2_message(
             _get_refund_content_hash(order_id_bytes),
             Field::from_be_bytes(SECRET),
             storage.config.read().portal,
             message_leaf_index,
-        );
+        );*/
 
         let token = u8_32_to_aztec_address(order_data.input_token);
         let partial_note = Token::at(token)
@@ -212,13 +215,14 @@ pub contract AztecGateway7683 {
     ) {
         let order_id = Field::from_be_bytes(order_id_bytes);
         let order_data = OrderData::decode(origin_data_bytes);
+        assert(order_id == order_data.id(), "Invalid id");
+
         let order_type = order_data.order_type;
         assert(
             (order_type == PUBLIC_ORDER) | (order_type == PUBLIC_ORDER_WITH_HOOK),
             "Not a public order",
         );
         assert(storage.order_status.at(order_id).read() == UNKNOWN, "Invalid status");
-        assert(order_id_bytes == sha256::digest(origin_data_bytes), "Invalid id");
         assert(context.timestamp() as u32 <= order_data.fill_deadline, "Order fill expired");
         assert(order_data.destination_domain == LOCAL_DOMAIN, "Invalid destination domain");
         storage.order_status.at(order_id).write(FILLED);
@@ -255,6 +259,8 @@ pub contract AztecGateway7683 {
         filler_data_bytes: [u8; 32],
     ) {
         let order_data = OrderData::decode(origin_data_bytes);
+        let order_id = Field::from_be_bytes(order_id_bytes);
+        assert(order_id == order_data.id(), "Invalid id");
 
         // transfer from filler private balance to gateway public balance
         Token::at(u8_32_to_aztec_address(order_data.output_token))
@@ -274,6 +280,7 @@ pub contract AztecGateway7683 {
         );
         AztecGateway7683::at(context.this_address())
             ._fill_private(
+                order_id,
                 order_id_bytes,
                 origin_data_bytes,
                 filler_data_bytes,
@@ -303,7 +310,6 @@ pub contract AztecGateway7683 {
         let order_id = data.order_id;
         let nonce = Field::from_be_bytes(data.order_data.sender_nonce);
         let order_type = data.order_data.order_type;
-
         assert(
             (order_type == PUBLIC_ORDER) | (order_type == PUBLIC_ORDER_WITH_HOOK),
             "Not a public order",
@@ -311,10 +317,6 @@ pub contract AztecGateway7683 {
         assert(data.order_data.origin_domain == LOCAL_DOMAIN, "Invalid origin domain");
         assert(!storage.used_nonces.at(context.msg_sender()).at(nonce).read(), "Invalid nonce");
 
-        // NOTE: We cannot store the entire order_data + ORDER_DATA_TYPE as it raises the following error:
-        // Reached the limit (63) on number of 'public data (contract storage) write' per tx 'storage_write_opcode(storage_slot, value).
-        // For this reason we store a commitment of it.
-        storage.open_orders.at(order_id).write(_get_order_commitment(order.order_data));
         storage.order_status.at(order_id).write(OPENED);
         storage.used_nonces.at(context.msg_sender()).at(nonce).write(true);
 
@@ -331,7 +333,7 @@ pub contract AztecGateway7683 {
                 .call(&mut context);
         }
 
-        let event = Open::new(data.order_id_bytes, resolved_order.serialize());
+        let event = Open::new(resolved_order.order_id, resolved_order.serialize());
         context.emit_public_log(event.open1.pack());
         context.emit_public_log(event.open2.pack());
     }
@@ -345,20 +347,15 @@ pub contract AztecGateway7683 {
         let resolved_order = data.resolved_cross_chain_order;
         let order_id = data.order_id;
         let nonce = Field::from_be_bytes(data.order_data.sender_nonce);
-        let order_type = data.order_data.order_type;
 
         assert(
-            (order_type == PRIVATE_ORDER) | (order_type == PRIVATE_ORDER_WITH_HOOK),
+            (data.order_data.order_type == PRIVATE_ORDER) | (data.order_data.order_type == PRIVATE_ORDER_WITH_HOOK),
             "Not a private order",
         );
         assert(data.order_data.origin_domain == LOCAL_DOMAIN, "Invalid origin domain");
 
         AztecGateway7683::at(context.this_address())
-            ._assert_nonce_and_set_order_details_private(
-                order_id,
-                _get_order_commitment(order.order_data),
-                nonce,
-            )
+            ._assert_nonce_and_set_order_status_private(order_id, nonce)
             .enqueue(&mut context);
 
         for i in 0..resolved_order.min_received.len() {
@@ -376,21 +373,21 @@ pub contract AztecGateway7683 {
         }
 
         AztecGateway7683::at(context.this_address())
-            ._emit_open_private(data.order_id_bytes, resolved_order.serialize())
+            ._emit_open_private(resolved_order.order_id, resolved_order.serialize())
             .enqueue(&mut context);
     }
 
     #[public]
     fn refund(order_id_bytes: [u8; 32], origin_data_bytes: [u8; ORDER_DATA_LENGTH]) {
         let order_id = Field::from_be_bytes(order_id_bytes);
-        assert(storage.order_status.at(order_id).read() == UNKNOWN, "Invalid status");
-        let order_commitment = _get_order_commitment(origin_data_bytes);
-        assert(storage.open_orders.at(order_id).read() == order_commitment, "Invalid order");
         let order_data = OrderData::decode(origin_data_bytes);
+        assert(order_data.id() == order_id, "Invalid id");
+        assert(storage.order_status.at(order_id).read() == UNKNOWN, "Invalid status");
         assert(context.timestamp() as u32 > order_data.fill_deadline, "Order not expired");
-        let config = storage.config.read();
-        let content_hash = _get_refund_content_hash(order_id_bytes);
-        context.message_portal(config.portal, content_hash);
+        context.message_portal(
+            storage.config.read().portal,
+            _get_refund_content_hash(order_id_bytes),
+        );
     }
 
     #[public]
@@ -401,21 +398,12 @@ pub contract AztecGateway7683 {
         message_leaf_index: Field,
     ) {
         let order_id = Field::from_be_bytes(order_id_bytes);
-        // NOTE: If a user wanted to open an order on the same chain, this code wouldn't work because
-        // the order_status would be FILLED. However, considering that for PoC we don't handle that case,
-        // this check is sufficient.
-        assert(storage.order_status.at(order_id).read() == OPENED, "Invalid status");
-
-        let order_commitment = _get_order_commitment(origin_data_bytes);
-        assert(storage.open_orders.at(order_id).read() == order_commitment, "Invalid order");
-
         let order_data = OrderData::decode(origin_data_bytes);
-        let order_type = order_data.order_type;
-        // NOTE: This check is necessary because if a user opens a private order, it means they have transferred
-        // tokens privately. As a result, the public state (`token.public_balances`) is not updated,
-        // making it impossible to call `transfer_in_public`, as it would fail.
+        assert(order_data.id() == order_id, "Invalid id");
+        assert(storage.order_status.at(order_id).read() == OPENED, "Invalid status");
         assert(
-            (order_type == PUBLIC_ORDER) | (order_type == PUBLIC_ORDER_WITH_HOOK),
+            (order_data.order_type == PUBLIC_ORDER)
+                | (order_data.order_type == PUBLIC_ORDER_WITH_HOOK),
             "Not a public order",
         );
         let config = storage.config.read();
@@ -428,12 +416,12 @@ pub contract AztecGateway7683 {
             "Invalid destination domain",
         );
 
-        context.consume_l1_to_l2_message(
+        /*context.consume_l1_to_l2_message(
             _get_settle_content_hash(order_id_bytes, filler_data_bytes),
             Field::from_be_bytes(SECRET),
             storage.config.read().portal,
             message_leaf_index,
-        );
+        );*/
 
         // transfer from gateway public balance to user public balande
         Token::at(u8_32_to_aztec_address(order_data.input_token))
@@ -446,8 +434,8 @@ pub contract AztecGateway7683 {
             .call(&mut context);
 
         storage.order_status.at(order_id).write(SETTLED);
-        /*context.emit_public_log(Settled { order_id: order_id_bytes, receiver: filler_data_bytes }
-            .pack());*/
+        context.emit_public_log(Settled { order_id: order_id_bytes, receiver: filler_data_bytes }
+            .pack());
     }
 
     #[private]
@@ -458,14 +446,13 @@ pub contract AztecGateway7683 {
         message_leaf_index: Field,
     ) {
         let order_id = Field::from_be_bytes(order_id_bytes);
+        let order_data = OrderData::decode(origin_data_bytes);
+        assert(order_data.id() == order_id, "Invalid id");
+
         AztecGateway7683::at(context.this_address())
             ._assert_order_status_private(order_id, OPENED)
             .enqueue(&mut context);
-        AztecGateway7683::at(context.this_address())
-            ._assert_order_commitment_private(order_id, _get_order_commitment(origin_data_bytes))
-            .enqueue(&mut context);
 
-        let order_data = OrderData::decode(origin_data_bytes);
         assert(
             (order_data.order_type == PRIVATE_ORDER)
                 | (order_data.order_type == PRIVATE_ORDER_WITH_HOOK),
@@ -481,12 +468,12 @@ pub contract AztecGateway7683 {
             "Invalid destination domain",
         );
 
-        context.consume_l1_to_l2_message(
+        /*context.consume_l1_to_l2_message(
             _get_settle_content_hash(order_id_bytes, filler_data_bytes),
             Field::from_be_bytes(SECRET),
             storage.config.read().portal,
             message_leaf_index,
-        );
+        );*/
 
         let filler = u8_32_to_aztec_address(filler_data_bytes);
         let token = u8_32_to_aztec_address(order_data.input_token);
@@ -500,24 +487,16 @@ pub contract AztecGateway7683 {
             ._update_order_status_private(order_id, SETTLED)
             .enqueue(&mut context);
 
-        /*AztecGateway7683::at(context.this_address())
+        AztecGateway7683::at(context.this_address())
             ._emit_settled_private(order_id_bytes, filler_data_bytes)
-            .enqueue(&mut context);*/
+            .enqueue(&mut context);
     }
 
     #[public]
     #[internal]
-    fn _assert_nonce_and_set_order_details_private(
-        order_id: Field,
-        order_commitment: Field,
-        nonce: Field,
-    ) {
+    fn _assert_nonce_and_set_order_status_private(order_id: Field, nonce: Field) {
         assert(!storage.used_nonces.at(context.msg_sender()).at(nonce).read(), "Invalid nonce");
         storage.used_nonces.at(context.msg_sender()).at(nonce).write(true);
-        // NOTE: We cannot store the entire order_data + ORDER_DATA_TYPE as it raises the following error:
-        // Reached the limit (63) on number of 'public data (contract storage) write' per tx 'storage_write_opcode(storage_slot, value).
-        // For this reason we store a commitment of it.
-        storage.open_orders.at(order_id).write(order_commitment);
         storage.order_status.at(order_id).write(OPENED);
     }
 
@@ -529,23 +508,17 @@ pub contract AztecGateway7683 {
 
     #[public]
     #[internal]
-    fn _assert_order_commitment_private(order_id: Field, order_commitment: Field) {
-        assert(storage.open_orders.at(order_id).read() == order_commitment, "Invalid order");
+    fn _check_if_order_is_claimable_private(order_id: Field, claimable_order_commitment: Field) {
+        assert(
+            storage.claimable_orders.at(order_id).read() == claimable_order_commitment,
+            "Invalid order",
+        );
     }
 
     #[public]
     #[internal]
-    fn _check_if_order_is_claimable_private(order_id: Field, order_pre_image: Field) {
-        let order_commitment = storage.claimable_orders.at(order_id).read();
-        assert(order_commitment == order_pre_image, "Invalid order");
-    }
-
-    #[public]
-    #[internal]
-    fn _check_refund_private(order_commitment: Field, order_id_bytes: [u8; 32]) {
-        let order_id = Field::from_be_bytes(order_id_bytes);
+    fn _check_refund_private(order_id: Field) {
         assert(storage.order_status.at(order_id).read() == OPENED, "Order not opened");
-        assert(storage.open_orders.at(order_id).read() == order_commitment, "Invalid order");
         storage.order_status.at(order_id).write(REFUNDED);
         // TODO: emit Refunded
     }
@@ -561,28 +534,26 @@ pub contract AztecGateway7683 {
         context.emit_public_log(event.open2.pack());
     }
 
-    /*#[public]
+    #[public]
     #[internal]
     fn _emit_settled_private(order_id_bytes: [u8; 32], receiver: [u8; 32]) {
         context.emit_public_log(Settled { order_id: order_id_bytes, receiver }.pack());
-    }*/
+    }
 
     #[public]
     #[internal]
     fn _fill_private(
+        order_id: Field,
         order_id_bytes: [u8; 32],
         origin_data_bytes: [u8; ORDER_DATA_LENGTH],
         filler_data_bytes: [u8; 32],
         fill_deadline: u32,
     ) {
-        let order_id = Field::from_be_bytes(order_id_bytes);
         assert(storage.order_status.at(order_id).read() == UNKNOWN, "Invalid status");
-        assert(order_id_bytes == sha256::digest(origin_data_bytes), "Invalid id");
         assert(context.timestamp() as u32 <= fill_deadline, "Order is expired");
-        storage.claimable_orders.at(order_id).write(sha256_to_field(_get_order_pre_image(
-            origin_data_bytes,
-            filler_data_bytes,
-        )));
+
+        let order_commitment = _get_claimable_order_commitment(order_id, filler_data_bytes);
+        storage.claimable_orders.at(order_id).write(order_commitment);
         storage.order_status.at(order_id).write(FILLED_PRIVATELY);
         context.emit_public_log(Filled {
             order_id: order_id_bytes,
@@ -606,15 +577,29 @@ pub contract AztecGateway7683 {
     }
 
     #[contract_library_method]
-    fn _get_order_commitment(order_data_bytes: [u8; ORDER_DATA_LENGTH]) -> Field {
-        let mut bytes: [u8; ORDER_DATA_LENGTH + 32] = [0; ORDER_DATA_LENGTH + 32];
+    fn _get_claimable_order_commitment(order_id: Field, filler_data_bytes: [u8; 32]) -> Field {
+        poseidon2_hash([order_id, Field::from_be_bytes(filler_data_bytes)])
+    }
+
+    #[contract_library_method]
+    fn _get_settle_content_hash(order_id_bytes: [u8; 32], filler_data_bytes: [u8; 32]) -> Field {
+        let mut hash_bytes = [0; 96];
         for i in 0..32 {
-            bytes[i] = ORDER_DATA_TYPE[i];
+            hash_bytes[i] = SETTLE_ORDER_TYPE[i];
+            hash_bytes[i + 32] = order_id_bytes[i];
+            hash_bytes[i + 64] = filler_data_bytes[i];
         }
-        for i in 0..ORDER_DATA_LENGTH {
-            bytes[i + 32] = order_data_bytes[i];
+        sha256_to_field(hash_bytes)
+    }
+
+    #[contract_library_method]
+    fn _get_refund_content_hash(order_id_bytes: [u8; 32]) -> Field {
+        let mut hash_bytes = [0; 64];
+        for i in 0..32 {
+            hash_bytes[i] = REFUND_ORDER_TYPE[i];
+            hash_bytes[i + 32] = order_id_bytes[i];
         }
-        sha256_to_field(bytes)
+        sha256_to_field(hash_bytes)
     }
 
     #[contract_library_method]
@@ -624,14 +609,12 @@ pub contract AztecGateway7683 {
         timestamp: u32,
     ) -> InternalRCOParams {
         let mut order_data = OrderData::decode(order.order_data);
+        let order_id = order_data.id();
 
         assert(order_data.fill_deadline == order.fill_deadline, "Invalid fill deadline");
         assert(u8_32_to_aztec_address(order_data.sender) == sender, "Invalid sender");
 
-        let order_id_bytes = sha256::digest(order.order_data);
-        let order_id = Field::from_be_bytes(order_id_bytes);
         let destination_domain_bytes = u32_to_u8_4(order_data.destination_domain);
-
         let min_received_output = Output {
             token: order_data.input_token,
             recipient: [0; 32],
@@ -657,6 +640,7 @@ pub contract AztecGateway7683 {
         let fill_instructions: [FillInstruction; FILL_INSTRUCTIONS_MAX_INSTRUCTIONS] =
             [fill_instruction; FILL_INSTRUCTIONS_MAX_INSTRUCTIONS];
 
+        let order_id_bytes = order_id.to_be_bytes();
         let resolved_order = ResolvedCrossChainOrder {
             user: order_data.sender,
             origin_chain_id: u32_to_u8_4(LOCAL_DOMAIN),
@@ -668,47 +652,7 @@ pub contract AztecGateway7683 {
             fill_instructions,
         };
 
-        InternalRCOParams {
-            order_id_bytes,
-            order_id,
-            resolved_cross_chain_order: resolved_order,
-            order_data,
-        }
+        InternalRCOParams { order_id, resolved_cross_chain_order: resolved_order, order_data }
     }
 
-    #[contract_library_method]
-    fn _get_order_pre_image(
-        origin_data_bytes: [u8; ORDER_DATA_LENGTH],
-        filler_data_bytes: [u8; 32],
-    ) -> [u8; ORDER_DATA_LENGTH + 32] {
-        let mut pre_image: [u8; ORDER_DATA_LENGTH + 32] = [0; ORDER_DATA_LENGTH + 32];
-        for i in 0..ORDER_DATA_LENGTH {
-            pre_image[i] = origin_data_bytes[i];
-        }
-        for i in 0..32 {
-            pre_image[i + ORDER_DATA_LENGTH] = filler_data_bytes[i];
-        }
-        pre_image
-    }
-
-    #[contract_library_method]
-    fn _get_settle_content_hash(order_id_bytes: [u8; 32], filler_data_bytes: [u8; 32]) -> Field {
-        let mut hash_bytes = [0; 96];
-        for i in 0..32 {
-            hash_bytes[i] = SETTLE_ORDER_TYPE[i];
-            hash_bytes[i + 32] = order_id_bytes[i];
-            hash_bytes[i + 64] = filler_data_bytes[i];
-        }
-        sha256_to_field(hash_bytes)
-    }
-
-    #[contract_library_method]
-    fn _get_refund_content_hash(order_id_bytes: [u8; 32]) -> Field {
-        let mut hash_bytes = [0; 64];
-        for i in 0..32 {
-            hash_bytes[i] = REFUND_ORDER_TYPE[i];
-            hash_bytes[i + 32] = order_id_bytes[i];
-        }
-        sha256_to_field(hash_bytes)
-    }
 }
