@@ -8,7 +8,7 @@ import { TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
 
 import { parseFilledLog, parseOpenLog, parseResolvedCrossChainOrder, parseSettledLog } from "./utils.js"
 import { AztecGateway7683Contract, AztecGateway7683ContractArtifact } from "../../artifacts/AztecGateway7683.js"
-import { getWallet, getPXEs } from "../../../scripts/utils.js"
+import { getRandomWallet, getPXEs } from "../../../scripts/utils.js"
 import { getSponsoredFPCInstance } from "../../../scripts/fpc.js"
 import { OrderData } from "./OrderData.js"
 
@@ -48,9 +48,9 @@ const setup = async (pxes: PXE[]) => {
   }
 
   const paymentMethod = new SponsoredFeePaymentMethod(sponsoredFPC.address)
-  const user = await getWallet({ paymentMethod, pxe: pxe1 })
-  const filler = await getWallet({ paymentMethod, pxe: pxe2 })
-  const deployer = await getWallet({ paymentMethod, pxe: pxe2 })
+  const user = await getRandomWallet({ paymentMethod, pxe: pxe1 })
+  const filler = await getRandomWallet({ paymentMethod, pxe: pxe2 })
+  const deployer = await getRandomWallet({ paymentMethod, pxe: pxe2 })
 
   await user.registerSender(deployer.getAddress())
   await filler.registerSender(deployer.getAddress())
