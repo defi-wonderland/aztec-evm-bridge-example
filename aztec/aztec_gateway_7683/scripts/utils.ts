@@ -67,12 +67,12 @@ export const getWalletFromSecretKey = async ({
   pxe,
   secretKey: sk,
   deploy = false,
-  salt: s
+  salt: s,
 }: {
   secretKey: string
   paymentMethod?: FeePaymentMethod
   pxe: PXE
-  deploy?: boolean,
+  deploy?: boolean
   salt: string
 }) => {
   const salt = Fr.fromHexString(s)

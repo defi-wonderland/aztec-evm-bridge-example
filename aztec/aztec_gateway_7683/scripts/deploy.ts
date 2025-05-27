@@ -17,7 +17,7 @@ const main = async () => {
     salt: process.env.SALT as string,
     pxe,
     paymentMethod,
-    deploy: true
+    deploy: true,
   })
 
   const gateway = await AztecGateway7683Contract.deploy(wallet, L2_GATEWAY_7683, L2_GATEWAY_7683_DOMAIN, PORTAL_ADDRESS)
