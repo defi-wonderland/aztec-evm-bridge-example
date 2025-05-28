@@ -32,6 +32,7 @@ export const getAztecWallet = async (): Promise<AccountWalletWithSecretKey> => {
   const wallet = await account.getWallet()
 
   if (!accountRegistered) {
+    await pxe.registerAccount(secretKey, (await account.getCompleteAddress()).partialAddress)
     await pxe.registerContract({
       instance: account.getInstance(),
       artifact: SchnorrAccountContractArtifact,
@@ -59,14 +60,11 @@ export const initPxe = async () => {
 
 export const registerContracts = async ({ aztecGatewayAddress }: { aztecGatewayAddress: string }) => {
   const pxe = getPxe()
-
   await pxe.registerContract({
     instance: await getSponsoredFPCInstance(),
     artifact: SponsoredFPCContractArtifact,
   })
-
   await pxe.registerSender(AztecAddress.fromString(aztecGatewayAddress))
-
   await registerContractWithoutInstance(AztecAddress.fromString(aztecGatewayAddress), {
     artifact: AztecGateway7683ContractArtifact,
   })
@@ -80,10 +78,8 @@ export const getAztecNode = async (): Promise<AztecNode> => {
   return await createAztecNodeClient(process.env.PXE_URL || "http://localhost:8080")
 }
 
-export const getPaymentMethod = async (): Promise<SponsoredFeePaymentMethod> => {
-  const paymentMethod = new SponsoredFeePaymentMethod(await getSponsoredFPCAddress())
-  return paymentMethod
-}
+export const getPaymentMethod = async (): Promise<SponsoredFeePaymentMethod> =>
+  new SponsoredFeePaymentMethod(await getSponsoredFPCAddress())
 
 export const registerContractWithoutInstance = async (
   address: AztecAddress,

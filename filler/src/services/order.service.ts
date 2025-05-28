@@ -1,17 +1,17 @@
 import { erc20Abi, padHex, sliceHex } from "viem"
-import { AztecAddress, Fr } from "@aztec/aztec.js"
+import { AztecAddress, Fr, TxHash } from "@aztec/aztec.js"
 import { TokenContract, TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
 import { Mutex } from "async-mutex"
 import { waitForTransactionReceipt } from "viem/actions"
 
-import { registerContractWithoutInstance } from "../utils/aztec.js"
+import { getPaymentMethod, getPxe, registerContractWithoutInstance } from "../utils/aztec.js"
 import { AztecGateway7683Contract } from "../artifacts/AztecGateway7683/AztecGateway7683.js"
 import l2Gateway7683Abi from "../abis/l2Gateway7683.js"
 import {
   AZTEC_7683_CHAIN_ID,
   ORDER_FILLED,
   ORDER_STATUS_FILLED,
-  ORDER_STATUS_INITIATED_PRIVATELY,
+  ORDER_STATUS_FILLED_PRIVATELY,
   PRIVATE_ORDER_HEX,
 } from "../constants.js"
 import BaseService from "./base.service.js"
@@ -51,9 +51,9 @@ class OrderService extends BaseService {
     this.fillEvmOrderFromLogMutex = new Mutex()
     this.fillAztecOrderFromLogMutex = new Mutex()
 
-    this.monitorInitiadedPrivatelyOrders()
+    this.monitorFilledPrivatelyOrders()
     setInterval(() => {
-      this.monitorInitiadedPrivatelyOrders()
+      this.monitorFilledPrivatelyOrders()
     }, 30000)
   }
 
@@ -64,14 +64,14 @@ class OrderService extends BaseService {
    *
    * @returns {Promise<void>} A promise that resolves when monitoring is complete.
    */
-  async monitorInitiadedPrivatelyOrders(): Promise<void> {
+  async monitorFilledPrivatelyOrders(): Promise<void> {
     try {
       this.logger.info("looking for initiated privately orders ...")
 
       const orders = await this.db
         .collection("orders")
         .find({
-          status: ORDER_STATUS_INITIATED_PRIVATELY,
+          status: ORDER_STATUS_FILLED_PRIVATELY,
         })
         .toArray()
       if (orders.length === 0) {
@@ -247,32 +247,32 @@ class OrderService extends BaseService {
       ])
 
       const orderType = `0x${originData.slice(538, 540)}`
-      const orderStatus = orderType === PRIVATE_ORDER_HEX ? ORDER_STATUS_INITIATED_PRIVATELY : ORDER_STATUS_FILLED
+      const nextOrderStatus = orderType === PRIVATE_ORDER_HEX ? ORDER_STATUS_FILLED_PRIVATELY : ORDER_STATUS_FILLED
       const fillerData = padHex(this.evmMultiClient.getClientByChain(this.l2EvmChain).account!.address)
 
       let receipt
-      if (orderStatus === ORDER_STATUS_INITIATED_PRIVATELY) {
+      const paymentMethod = await getPaymentMethod()
+      if (nextOrderStatus === ORDER_STATUS_FILLED_PRIVATELY) {
         this.logger.info(`creating authwit to fill the order ${orderId} ...`)
         const nonce = `0x${originData.slice(386, 450)}`
         const witness = await this.aztecWallet.createAuthWit({
           caller: AztecAddress.fromString(this.aztecGatewayAddress),
-          action: token
-            .withWallet(this.aztecWallet)
-            .methods.transfer_to_public(
-              this.aztecWallet.getAddress(),
-              AztecAddress.fromString(this.aztecGatewayAddress),
-              maxSpentAmount,
-              Fr.fromHexString(nonce),
-            ),
+          action: token.methods.transfer_to_public(
+            this.aztecWallet.getAddress(),
+            AztecAddress.fromString(this.aztecGatewayAddress),
+            maxSpentAmount,
+            Fr.fromHexString(nonce),
+          ),
         })
         this.logger.info(`filling the private order ${orderId} ...`)
-        receipt = await aztecGateway
-          .withWallet(this.aztecWallet)
-          .methods.fill_private(hexToUintArray(orderId), hexToUintArray(originData), hexToUintArray(fillerData))
+        receipt = await aztecGateway.methods
+          .fill_private(hexToUintArray(orderId), hexToUintArray(originData), hexToUintArray(fillerData))
           .with({
             authWitnesses: [witness],
           })
-          .send()
+          .send({
+            fee: { paymentMethod },
+          })
           .wait()
       } else {
         this.logger.info(`setting public authwit to fill the order ${orderId} ...`)
@@ -289,14 +289,16 @@ class OrderService extends BaseService {
           },
           true,
         )
-        await res.send().wait()
+        await res.send({ fee: { paymentMethod } }).wait()
 
         this.logger.info(`filling the public order ${orderId} ...`)
 
         receipt = await aztecGateway
           .withWallet(this.aztecWallet)
           .methods.fill(hexToUintArray(orderId), hexToUintArray(originData), hexToUintArray(fillerData))
-          .send()
+          .send({
+            fee: { paymentMethod },
+          })
           .wait()
       }
 
@@ -308,7 +310,7 @@ class OrderService extends BaseService {
         fillerData,
         fillTxHash: receipt.txHash.toString(),
         log: (log as any).args,
-        orderStatus,
+        orderStatus: nextOrderStatus,
       })
     } catch (err) {
       this.logger.error(err)
@@ -328,7 +330,7 @@ class OrderService extends BaseService {
     orderId: `0x${string}`
     fillerData: `0x${string}`
     fillTxHash: `0x${string}`
-    orderStatus: "initiatedPrivately" | "filled"
+    orderStatus: "filledPrivately" | "filled"
     log: any
   }) {
     return await this.db.collection("orders").findOneAndUpdate(

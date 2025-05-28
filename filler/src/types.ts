@@ -1,4 +1,4 @@
-export type OrderStatus = "initiatedPrivately" | "filled"
+export type OrderStatus = "filledPrivately" | "filled"
 
 export interface Output {
   token: `0x${string}`

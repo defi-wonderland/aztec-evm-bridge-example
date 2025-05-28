@@ -8,7 +8,7 @@ export const SETTLE_ORDER_TYPE = "0x191ea776bd6e0cd56a6d44ba4aea2fec468b4a0b4c1d
 export const PUBLIC_ORDER_HEX = "0x00"
 export const PRIVATE_ORDER_HEX = "0x01"
 
-export const ORDER_STATUS_INITIATED_PRIVATELY = "initiatedPrivately"
+export const ORDER_STATUS_FILLED_PRIVATELY = "filledPrivately"
 export const ORDER_STATUS_FILLED = "filled"
 export const ORDER_STATUS_SETTLE_FORWARDED = "settleForwarded"
 export const ORDER_STATUS_SETTLED = "settled"
