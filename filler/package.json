@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "lint": "eslint --ignore-path ./.eslintignore --ext .js,.ts .",
+    "start": " NODE_NO_WARNINGS=1 node --loader ts-node/esm src/index.ts",
     "prettier:check": "prettier --check \"**/*.{js,json,md,sol,ts,yml}\"",
     "prettier:write": "prettier --write \"**/*.{js,json,md,sol,ts,yml}\""
   },
@@ -32,6 +33,7 @@
     "eslint": "^9.22.0",
     "eslint-config-prettier": "^10.1.1",
     "prettier": "^3.5.3",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "ts-node": "^10.9.2"
   }
 }
