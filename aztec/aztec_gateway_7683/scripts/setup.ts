@@ -1,6 +1,6 @@
-import { AztecAddress, Contract, EthAddress, Fr, SponsoredFeePaymentMethod } from "@aztec/aztec.js"
+import { Contract, createLogger, EthAddress, Fr, SponsoredFeePaymentMethod } from "@aztec/aztec.js"
 import { SponsoredFPCContract } from "@aztec/noir-contracts.js/SponsoredFPC"
-import { TokenContract, TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
+import { TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
 
 import { getSponsoredFPCInstance } from "./fpc.js"
 import { getPXEs, getRandomWallet } from "./utils.js"
@@ -11,6 +11,7 @@ const L2_CHAIN_ID = 11155420
 const DESTINATION_SETTLER_EVM_L2 = EthAddress.ZERO
 
 async function main(): Promise<void> {
+  const logger = createLogger("setup")
   const pxes = await getPXEs(["pxe1", "pxe2", "pxe3"])
   const [pxe1, pxe2, pxe3] = pxes
   const sponsoredFPC = await getSponsoredFPCInstance()
@@ -89,10 +90,8 @@ async function main(): Promise<void> {
     .send({ fee: { paymentMethod } })
     .wait()
 
-  console.log({
-    gateway: gateway.address.toString(),
-    token: token.address.toString(),
-  })
+  logger.info(`gateway deployed: ${gateway.address.toString()}`)
+  logger.info(`token deployed: ${token.address.toString()}`)
 }
 
 main().catch((err) => {

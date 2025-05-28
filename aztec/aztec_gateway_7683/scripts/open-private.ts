@@ -1,5 +1,5 @@
 import "dotenv/config"
-import { AztecAddress, Contract, Fr, SponsoredFeePaymentMethod } from "@aztec/aztec.js"
+import { AztecAddress, Contract, createLogger, Fr, SponsoredFeePaymentMethod } from "@aztec/aztec.js"
 import { hexToBytes, padHex } from "viem"
 
 import { getSponsoredFPCAddress } from "./fpc.js"
@@ -7,21 +7,23 @@ import { getPxe, getWalletFromSecretKey } from "./utils.js"
 import { AztecGateway7683ContractArtifact } from "../src/artifacts/AztecGateway7683.js"
 import { OrderData } from "../src/ts/test/OrderData.js"
 import { TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
+import { poseidon2Hash } from "@aztec/foundation/crypto"
 
 const AZTEC_GATEWAY_7683 = process.env.AZTEC_GATEWAY_7683 as `0x${string}`
 const L2_GATEWAY_7683 = process.env.L2_GATEWAY_7683 as `0x${string}`
 const RECIPIENT = process.env.RECIPIENT as `0x${string}`
-const TOKEN_IN = process.env.TOKEN_IN as `0x${string}`
-const TOKEN_OUT = process.env.TOKEN_OUT as `0x${string}`
+const AZTEC_TOKEN = process.env.AZTEC_TOKEN as `0x${string}`
+const L2_EVM_TOKEN = process.env.L2_EVM_TOKEN as `0x${string}`
 const L2_GATEWAY_7683_DOMAIN = parseInt(process.env.L2_GATEWAY_7683_DOMAIN as string)
 const ORDER_DATA_TYPE = "0xf00c3bf60c73eb97097f1c9835537da014e0b755fe94b25d7ac8401df66716a0"
 
 async function main(): Promise<void> {
+  const logger = createLogger("open-private")
   const pxe = await getPxe()
   const paymentMethod = new SponsoredFeePaymentMethod(await getSponsoredFPCAddress())
   const wallet = await getWalletFromSecretKey({
-    secretKey: process.env.SECRET_KEY as string,
-    salt: process.env.SALT as string,
+    secretKey: process.env.AZTEC_SECRET_KEY as string,
+    salt: process.env.AZTEC_KEY_SALT as string,
     pxe,
   })
 
@@ -32,7 +34,7 @@ async function main(): Promise<void> {
     AztecGateway7683ContractArtifact,
     wallet,
   )
-  const token = await Contract.at(AztecAddress.fromString(TOKEN_IN), TokenContractArtifact, wallet)
+  const token = await Contract.at(AztecAddress.fromString(AZTEC_TOKEN), TokenContractArtifact, wallet)
 
   const amountIn = 100n
   const nonce = Fr.random()
@@ -44,8 +46,8 @@ async function main(): Promise<void> {
   const orderData = new OrderData({
     sender: "0x0000000000000000000000000000000000000000000000000000000000000000",
     recipient: padHex(RECIPIENT),
-    inputToken: TOKEN_IN,
-    outputToken: padHex(TOKEN_OUT),
+    inputToken: AZTEC_TOKEN,
+    outputToken: padHex(L2_EVM_TOKEN),
     amountIn,
     amountOut: amountIn,
     senderNonce: nonce.toBigInt(),
@@ -57,7 +59,7 @@ async function main(): Promise<void> {
     data: padHex("0x00"),
   })
 
-  const tx = await gateway.methods
+  const receipt = await gateway.methods
     .open_private({
       fill_deadline: 2 ** 32 - 1,
       order_data: Array.from(hexToBytes(orderData.encode())),
@@ -69,7 +71,7 @@ async function main(): Promise<void> {
     .send({ fee: { paymentMethod } })
     .wait()
 
-  console.log("Private order opened:", tx.txHash.toString())
+  logger.info(`private order opened: ${receipt.txHash.toString()}`)
 }
 
 main().catch((err) => {

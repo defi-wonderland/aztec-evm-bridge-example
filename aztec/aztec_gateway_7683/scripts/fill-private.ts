@@ -1,5 +1,5 @@
 import "dotenv/config"
-import { AztecAddress, Contract, Fr, SponsoredFeePaymentMethod } from "@aztec/aztec.js"
+import { AztecAddress, Contract, createLogger, Fr, SponsoredFeePaymentMethod } from "@aztec/aztec.js"
 import { hexToBytes, padHex } from "viem"
 
 import { getSponsoredFPCAddress } from "./fpc.js"
@@ -16,11 +16,12 @@ const L2_GATEWAY_7683_DOMAIN = parseInt(process.env.L2_GATEWAY_7683_DOMAIN as st
 const EVM_WALLET = process.env.L2_EVM_TOKEN as `0x${string}`
 
 async function main(): Promise<void> {
+  const logger = createLogger("fill-private")
   const pxe = await getPxe()
   const paymentMethod = new SponsoredFeePaymentMethod(await getSponsoredFPCAddress())
   const wallet = await getWalletFromSecretKey({
-    secretKey: process.env.SECRET_KEY as string,
-    salt: process.env.SALT as string,
+    secretKey: process.env.AZTEC_SECRET_KEY as string,
+    salt: process.env.AZTEC_KEY_SALT as string,
     pxe,
   })
 
@@ -75,7 +76,7 @@ async function main(): Promise<void> {
     })
     .wait()
 
-  console.log("order filled:", receipt.txHash.toString())
+  logger.info(`order filled: ${receipt.txHash.toString()}`)
 }
 
 main().catch((err) => {

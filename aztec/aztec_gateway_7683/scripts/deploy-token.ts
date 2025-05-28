@@ -1,16 +1,17 @@
 import "dotenv/config"
-import { SponsoredFeePaymentMethod } from "@aztec/aztec.js"
+import { createLogger, SponsoredFeePaymentMethod } from "@aztec/aztec.js"
 import { TokenContract } from "@aztec/noir-contracts.js/Token"
 
 import { getSponsoredFPCAddress } from "./fpc.js"
 import { getPxe, getWalletFromSecretKey } from "./utils.js"
 
 const main = async () => {
+  const logger = createLogger("deploy-token")
   const pxe = await getPxe()
   const paymentMethod = new SponsoredFeePaymentMethod(await getSponsoredFPCAddress())
   const wallet = await getWalletFromSecretKey({
-    secretKey: process.env.SECRET_KEY as string,
-    salt: process.env.SALT as string,
+    secretKey: process.env.AZTEC_SECRET_KEY as string,
+    salt: process.env.AZTEC_KEY_SALT as string,
     pxe,
   })
 
@@ -38,7 +39,7 @@ const main = async () => {
     artifact: TokenContract.artifact,
   })
 
-  console.log("token:", token.address.toString())
+  logger.info(`token deployed: ${token.address.toString()}`)
 }
 
 main().catch((err) => {
