@@ -53,6 +53,7 @@ class AztecWatcher {
 
       const fromBlock = this.lastBlock + 1
       const toBlock = currentBlock + 1
+      this.lastBlock = currentBlock
 
       if (fromBlock === toBlock) {
         this.logger.info(`no new blocks detected. currentBlock is ${currentBlock}. skipping ...`)
@@ -100,8 +101,6 @@ class AztecWatcher {
         this.logger.info(`Detected ${joinedLogs.length} new ${this.eventName} events Aztec. Processing them ...`)
         await this.onLogs(joinedLogs)
       }
-
-      this.lastBlock = currentBlock
     } catch (error) {
       this.logger.error(error)
     }

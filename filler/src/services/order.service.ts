@@ -1,10 +1,10 @@
 import { erc20Abi, padHex, sliceHex } from "viem"
-import { AztecAddress, Fr, TxHash } from "@aztec/aztec.js"
+import { AztecAddress, Fr } from "@aztec/aztec.js"
 import { TokenContract, TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
 import { Mutex } from "async-mutex"
 import { waitForTransactionReceipt } from "viem/actions"
 
-import { getPaymentMethod, getPxe, registerContractWithoutInstance } from "../utils/aztec.js"
+import { getPaymentMethod, registerContractWithoutInstance } from "../utils/aztec.js"
 import { AztecGateway7683Contract } from "../artifacts/AztecGateway7683/AztecGateway7683.js"
 import l2Gateway7683Abi from "../abis/l2Gateway7683.js"
 import {
@@ -54,16 +54,10 @@ class OrderService extends BaseService {
     this.monitorFilledPrivatelyOrders()
     setInterval(() => {
       this.monitorFilledPrivatelyOrders()
-    }, 30000)
+    }, 180000)
   }
 
-  /**
-   *
-   * @remarks
-   * Currently, privately initiated orders are created only on the Aztec network.
-   *
-   * @returns {Promise<void>} A promise that resolves when monitoring is complete.
-   */
+
   async monitorFilledPrivatelyOrders(): Promise<void> {
     try {
       this.logger.info("looking for initiated privately orders ...")

@@ -53,6 +53,8 @@ class EvmWatcher {
 
       const fromBlock = this.lastBlock + 1n
       const toBlock = currentBlock
+      this.lastBlock = currentBlock
+
       this.logger.info(
         `looking for ${this.eventName} events from block ${fromBlock} to block ${toBlock} on ${this.client.chain!.name} ...`,
       )
@@ -73,8 +75,6 @@ class EvmWatcher {
         )
         await this.onLogs(logs)
       }
-
-      this.lastBlock = currentBlock
     } catch (error) {
       this.logger.error(error)
     }
