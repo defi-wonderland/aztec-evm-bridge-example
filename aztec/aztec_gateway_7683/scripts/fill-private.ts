@@ -13,6 +13,7 @@ const AZTEC_GATEWAY_7683 = process.env.AZTEC_GATEWAY_7683 as `0x${string}`
 const AZTEC_TOKEN = process.env.AZTEC_TOKEN as `0x${string}`
 const L2_EVM_TOKEN = process.env.L2_EVM_TOKEN as `0x${string}`
 const L2_GATEWAY_7683_DOMAIN = parseInt(process.env.L2_GATEWAY_7683_DOMAIN as string)
+const EVM_WALLET = process.env.L2_EVM_TOKEN as `0x${string}`
 
 async function main(): Promise<void> {
   const pxe = await getPxe()
@@ -64,7 +65,7 @@ async function main(): Promise<void> {
     .fill_private(
       Array.from(hexToBytes(orderId.toString())),
       Array.from(hexToBytes(orderData.encode())),
-      Array.from(hexToBytes(wallet.getAddress().toString())),
+      Array.from(hexToBytes(padHex(EVM_WALLET))),
     )
     .with({
       authWitnesses: [witness],
