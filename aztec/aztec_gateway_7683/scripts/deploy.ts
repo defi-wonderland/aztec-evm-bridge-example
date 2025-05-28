@@ -1,6 +1,6 @@
 import "dotenv/config"
 import { AztecGateway7683Contract } from "../src/artifacts/AztecGateway7683.js"
-import { EthAddress, SponsoredFeePaymentMethod } from "@aztec/aztec.js"
+import { EthAddress, Fr, SponsoredFeePaymentMethod } from "@aztec/aztec.js"
 
 import { getSponsoredFPCAddress } from "./fpc.js"
 import { getPxe, getWalletFromSecretKey } from "./utils.js"
@@ -17,7 +17,7 @@ const main = async () => {
     salt: process.env.SALT as string,
     pxe,
     paymentMethod,
-    deploy: true,
+    deploy: false,
   })
 
   const gateway = await AztecGateway7683Contract.deploy(wallet, L2_GATEWAY_7683, L2_GATEWAY_7683_DOMAIN, PORTAL_ADDRESS)

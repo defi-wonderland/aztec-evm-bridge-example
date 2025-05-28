@@ -24,8 +24,8 @@ const PUBLIC_ORDER = 0
 const PRIVATE_ORDER = 1
 const PRIVATE_SENDER = "0x0000000000000000000000000000000000000000000000000000000000000000"
 const RECIPIENT = "0x1111111111111111111111111111111111111111111111111111111111111111"
-const TOKEN_IN = "0x2222222222222222222222222222222222222222222222222222222222222222"
-const TOKEN_OUT = "0x3333333333333333333333333333333333333333333333333333333333333333"
+const AZTEC_TOKEN = "0x2222222222222222222222222222222222222222222222222222222222222222"
+const L2_EVM_TOKEN = "0x3333333333333333333333333333333333333333333333333333333333333333"
 const AMOUNT_OUT_ZERO = 0n
 const AMOUNT_IN_ZERO = 0n
 // const MAINNET_CHAIN_ID = 1
@@ -172,7 +172,7 @@ describe("AztecGateway7683", () => {
       sender: user.getAddress().toString(),
       recipient: RECIPIENT,
       inputToken: token.address.toString(),
-      outputToken: TOKEN_OUT,
+      outputToken: L2_EVM_TOKEN,
       amountIn,
       amountOut: AMOUNT_OUT_ZERO,
       senderNonce: nonce.toBigInt(),
@@ -215,7 +215,7 @@ describe("AztecGateway7683", () => {
     expect(parsedResolvedCrossChainOrder.maxSpent[0].chainId).toBe(L2_DOMAIN)
     expect(parsedResolvedCrossChainOrder.maxSpent[0].amount).toBe(AMOUNT_OUT_ZERO)
     expect(parsedResolvedCrossChainOrder.maxSpent[0].recipient).toBe(RECIPIENT)
-    expect(parsedResolvedCrossChainOrder.maxSpent[0].token).toBe(TOKEN_OUT)
+    expect(parsedResolvedCrossChainOrder.maxSpent[0].token).toBe(L2_EVM_TOKEN)
     expect(parsedResolvedCrossChainOrder.minReceived[0].chainId).toBe(AZTEC_7683_DOMAIN)
     expect(parsedResolvedCrossChainOrder.minReceived[0].amount).toBe(amountIn)
     expect(parsedResolvedCrossChainOrder.minReceived[0].recipient).toBe(padHex("0x00"))
@@ -263,7 +263,7 @@ describe("AztecGateway7683", () => {
       sender: PRIVATE_SENDER,
       recipient: RECIPIENT,
       inputToken: token.address.toString(),
-      outputToken: TOKEN_OUT,
+      outputToken: L2_EVM_TOKEN,
       amountIn,
       amountOut: AMOUNT_OUT_ZERO,
       senderNonce: nonce.toBigInt(),
@@ -308,7 +308,7 @@ describe("AztecGateway7683", () => {
     expect(parsedResolvedCrossChainOrder.maxSpent[0].chainId).toBe(L2_DOMAIN)
     expect(parsedResolvedCrossChainOrder.maxSpent[0].amount).toBe(AMOUNT_OUT_ZERO)
     expect(parsedResolvedCrossChainOrder.maxSpent[0].recipient).toBe(RECIPIENT)
-    expect(parsedResolvedCrossChainOrder.maxSpent[0].token).toBe(TOKEN_OUT)
+    expect(parsedResolvedCrossChainOrder.maxSpent[0].token).toBe(L2_EVM_TOKEN)
     expect(parsedResolvedCrossChainOrder.minReceived[0].chainId).toBe(AZTEC_7683_DOMAIN)
     expect(parsedResolvedCrossChainOrder.minReceived[0].amount).toBe(amountIn)
     expect(parsedResolvedCrossChainOrder.minReceived[0].recipient).toBe(padHex("0x00"))
@@ -350,7 +350,7 @@ describe("AztecGateway7683", () => {
     const orderData = new OrderData({
       sender: deployer.getAddress().toString(),
       recipient: user.getAddress().toString(),
-      inputToken: TOKEN_IN,
+      inputToken: AZTEC_TOKEN,
       outputToken: token.address.toString(),
       amountIn: AMOUNT_IN_ZERO,
       amountOut,
@@ -436,7 +436,7 @@ describe("AztecGateway7683", () => {
     const orderData = new OrderData({
       sender: PRIVATE_SENDER,
       recipient: SECRET_HASH.toString(),
-      inputToken: TOKEN_IN,
+      inputToken: AZTEC_TOKEN,
       outputToken: token.address.toString(),
       amountIn: AMOUNT_IN_ZERO,
       amountOut,
@@ -545,7 +545,7 @@ describe("AztecGateway7683", () => {
       sender: user.getAddress().toString(),
       recipient: RECIPIENT,
       inputToken: token.address.toString(),
-      outputToken: TOKEN_OUT,
+      outputToken: L2_EVM_TOKEN,
       amountIn,
       amountOut: AMOUNT_OUT_ZERO,
       senderNonce: nonce.toBigInt(),
@@ -599,7 +599,7 @@ describe("AztecGateway7683", () => {
       sender: PRIVATE_SENDER,
       recipient: SECRET_HASH.toString(),
       inputToken: token.address.toString(),
-      outputToken: TOKEN_OUT,
+      outputToken: L2_EVM_TOKEN,
       amountIn,
       amountOut: AMOUNT_OUT_ZERO,
       senderNonce: nonce.toBigInt(),
