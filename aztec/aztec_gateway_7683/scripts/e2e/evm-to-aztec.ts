@@ -49,8 +49,6 @@ async function main(): Promise<void> {
     data: padHex("0x00"),
   })
   const orderId = await orderData.id()
-  console.log("encode")
-  console.log(orderData.encode())
 
   // NOTE: make sure to approve the tokens
   logger.info("creating open order on op sepolia ...")
