@@ -358,12 +358,10 @@ class SettlementService extends BaseService {
       const messageHash = sha256ToField(message)
 
       const { parentBeaconBlockRoot: beaconRoot, timestamp: beaconOracleTimestamp } = await l2EvmClient.getBlock()
-      console.log("1", `${this.beaconApiUrl}/eth/v2/beacon/blocks/${beaconRoot}`)
 
       const resp = await fetch(`${this.beaconApiUrl}/eth/v2/beacon/blocks/${beaconRoot}`, {
         headers: { Accept: "application/octet-stream" },
       })
-      console.log(await resp.json())
       const beaconBlock = SignedBeaconBlock.deserialize(new Uint8Array(await resp.arrayBuffer())).message
       const l1BlockNumber = BigInt(beaconBlock.body.executionPayload.blockNumber)
 
