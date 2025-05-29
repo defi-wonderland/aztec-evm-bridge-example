@@ -1,5 +1,4 @@
-import { EthAddress } from "@aztec/aztec.js"
-import { optimismSepolia } from "viem/chains"
+import "dotenv/config"
 
 export const AZTEC_7683_CHAIN_ID = 999999n
 
@@ -15,9 +14,9 @@ export const ORDER_STATUS_SETTLED = "settled"
 
 export const ORDER_FILLED = 2n
 
-export const PORTAL_ADDRESS = EthAddress.ZERO // TODO
-export const FORWARDER_CHAIN_ID = 31337
-export const AZTEC_VERSION = 1369311804 // TODO read it from the RollupContract
+export const PORTAL_ADDRESS = process.env.FORWARDER_ADDRESS as `0x${string}`
+export const FORWARDER_CHAIN_ID = 11155111
+export const AZTEC_VERSION = 4189337207 // TODO read it from the RollupContract
 
 export const FORWARDER_SETTLE_ORDER_SLOTS = 0n
 export const L2_GATEWAY_FILLED_ORDERS_SLOT = 51n

@@ -57,7 +57,6 @@ class OrderService extends BaseService {
     }, 180000)
   }
 
-
   async monitorFilledPrivatelyOrders(): Promise<void> {
     try {
       this.logger.info("looking for initiated privately orders ...")

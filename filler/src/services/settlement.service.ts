@@ -1,6 +1,6 @@
 import { sha256ToField } from "@aztec/foundation/crypto"
-import { AztecAddress, Fr } from "@aztec/aztec.js"
-import { bytesToHex, encodeAbiParameters, keccak256, padHex } from "viem"
+import { AztecAddress, EthAddress, Fr } from "@aztec/aztec.js"
+import { bytesToHex, encodeAbiParameters, keccak256 } from "viem"
 import { waitForTransactionReceipt } from "viem/actions"
 const { ssz } = await import("@lodestar/types")
 const { BeaconBlock, SignedBeaconBlock } = ssz.electra
@@ -109,6 +109,7 @@ class SettlementService extends BaseService {
           status: ORDER_STATUS_FILLED,
         })
         .toArray()
+
       for (const order of orders) {
         try {
           if (order.resolvedOrder.maxSpent[0].chainId === this.l2EvmChain.id) {
@@ -119,7 +120,7 @@ class SettlementService extends BaseService {
               fillerData: order.fillerData,
               status: order.status,
             })
-          } else if (order.resolvedOrder.maxSpent[0].chainId === AZTEC_7683_CHAIN_ID) {
+          } else if (order.resolvedOrder.maxSpent[0].chainId === Number(AZTEC_7683_CHAIN_ID)) {
             await this.forwardOrderSettlementToEvmL2({
               orderId: order.orderId,
               resolvedOrder: order.resolvedOrder,
@@ -217,6 +218,11 @@ class SettlementService extends BaseService {
     try {
       this.logger.info(`forwarding settlement to L2 for order ${order.orderId} ...`)
 
+      const gateway = await AztecGateway7683Contract.at(
+        AztecAddress.fromString(this.aztecGatewayAddress),
+        this.aztecWallet,
+      )
+
       const message = [
         Buffer.from(SETTLE_ORDER_TYPE.slice(2), "hex"),
         Buffer.from(order.orderId.slice(2), "hex"),
@@ -227,18 +233,16 @@ class SettlementService extends BaseService {
       const l2ToL1Message = sha256ToField([
         Buffer.from(this.aztecGatewayAddress.slice(2), "hex"),
         new Fr(AZTEC_VERSION).toBuffer(),
-        PORTAL_ADDRESS.toBuffer32(),
+        EthAddress.fromString(PORTAL_ADDRESS).toBuffer32(),
         new Fr(FORWARDER_CHAIN_ID).toBuffer(),
         messageHash.toBuffer(),
       ])
 
-      const gateway = await AztecGateway7683Contract.at(
-        AztecAddress.fromString(this.aztecGatewayAddress),
-        this.aztecWallet,
-      )
       const orderSettlementBlockNumber = await gateway.methods
         .get_order_settlement_block_number(Fr.fromBufferReduce(Buffer.from(order.orderId.slice(2), "hex")))
         .simulate()
+
+      // TODO: ROLLUP.getProvenBlockNumber()
 
       const [l2ToL1MessageIndex, siblingPath] = await this.pxe.getL2ToL1MembershipWitness(
         parseInt(orderSettlementBlockNumber),
@@ -260,7 +264,7 @@ class SettlementService extends BaseService {
           bytesToHex(Buffer.concat([...message])),
           orderSettlementBlockNumber,
           l2ToL1MessageIndex,
-          [padHex("0x00")],
+          siblingPath.toBufferArray().map((buff) => "0x" + buff.toString("hex")),
         ],
         chain: this.l1Chain,
         functionName: "forwardSettleToL2",
@@ -311,7 +315,7 @@ class SettlementService extends BaseService {
               fillerData: order.fillerData,
               status: order.status,
             })
-          } else if (order.resolvedOrder.maxSpent[0].chainId === AZTEC_7683_CHAIN_ID) {
+          } else if (order.resolvedOrder.maxSpent[0].chainId === Number(AZTEC_7683_CHAIN_ID)) {
             await this.settleOrderOnEvmL2({
               orderId: order.orderId,
               resolvedOrder: order.resolvedOrder,
@@ -354,9 +358,12 @@ class SettlementService extends BaseService {
       const messageHash = sha256ToField(message)
 
       const { parentBeaconBlockRoot: beaconRoot, timestamp: beaconOracleTimestamp } = await l2EvmClient.getBlock()
+      console.log("1", `${this.beaconApiUrl}/eth/v2/beacon/blocks/${beaconRoot}`)
+
       const resp = await fetch(`${this.beaconApiUrl}/eth/v2/beacon/blocks/${beaconRoot}`, {
         headers: { Accept: "application/octet-stream" },
       })
+      console.log(await resp.json())
       const beaconBlock = SignedBeaconBlock.deserialize(new Uint8Array(await resp.arrayBuffer())).message
       const l1BlockNumber = BigInt(beaconBlock.body.executionPayload.blockNumber)
 

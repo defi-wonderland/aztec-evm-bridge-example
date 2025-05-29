@@ -18,11 +18,6 @@ export default [
         internalType: "address",
       },
       {
-        name: "aztecGateway",
-        type: "bytes32",
-        internalType: "bytes32",
-      },
-      {
         name: "anchorStateRegistry",
         type: "address",
         internalType: "address",
@@ -45,7 +40,7 @@ export default [
   },
   {
     type: "function",
-    name: "AZTEC_GATEWAY",
+    name: "AZTEC_GATEWAY_7683",
     inputs: [],
     outputs: [
       {
@@ -107,6 +102,125 @@ export default [
       },
     ],
     stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "forwardRefundToAztec",
+    inputs: [
+      {
+        name: "orderId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "originData",
+        type: "bytes",
+        internalType: "bytes",
+      },
+      {
+        name: "accountProofParams",
+        type: "tuple",
+        internalType: "struct StateValidator.AccountProofParameters",
+        components: [
+          {
+            name: "storageKey",
+            type: "bytes",
+            internalType: "bytes",
+          },
+          {
+            name: "storageValue",
+            type: "bytes",
+            internalType: "bytes",
+          },
+          {
+            name: "accountProof",
+            type: "bytes[]",
+            internalType: "bytes[]",
+          },
+          {
+            name: "storageProof",
+            type: "bytes[]",
+            internalType: "bytes[]",
+          },
+        ],
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "forwardRefundToL2",
+    inputs: [
+      {
+        name: "l2ToL1Message",
+        type: "tuple",
+        internalType: "struct DataStructures.L2ToL1Msg",
+        components: [
+          {
+            name: "sender",
+            type: "tuple",
+            internalType: "struct DataStructures.L2Actor",
+            components: [
+              {
+                name: "actor",
+                type: "bytes32",
+                internalType: "bytes32",
+              },
+              {
+                name: "version",
+                type: "uint256",
+                internalType: "uint256",
+              },
+            ],
+          },
+          {
+            name: "recipient",
+            type: "tuple",
+            internalType: "struct DataStructures.L1Actor",
+            components: [
+              {
+                name: "actor",
+                type: "address",
+                internalType: "address",
+              },
+              {
+                name: "chainId",
+                type: "uint256",
+                internalType: "uint256",
+              },
+            ],
+          },
+          {
+            name: "content",
+            type: "bytes32",
+            internalType: "bytes32",
+          },
+        ],
+      },
+      {
+        name: "message",
+        type: "bytes",
+        internalType: "bytes",
+      },
+      {
+        name: "aztecBlockNumber",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "leafIndex",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "path",
+        type: "bytes32[]",
+        internalType: "bytes32[]",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
   },
   {
     type: "function",
@@ -233,6 +347,97 @@ export default [
     stateMutability: "nonpayable",
   },
   {
+    type: "function",
+    name: "owner",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "renounceOwnership",
+    inputs: [],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "setAztecGateway7683",
+    inputs: [
+      {
+        name: "aztecGateway7683",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "transferOwnership",
+    inputs: [
+      {
+        name: "newOwner",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "event",
+    name: "OwnershipTransferred",
+    inputs: [
+      {
+        name: "previousOwner",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "newOwner",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "RefundForwardedToAztec",
+    inputs: [
+      {
+        name: "message",
+        type: "bytes",
+        indexed: false,
+        internalType: "bytes",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "RefundForwardedToL2",
+    inputs: [
+      {
+        name: "message",
+        type: "bytes",
+        indexed: false,
+        internalType: "bytes",
+      },
+    ],
+    anonymous: false,
+  },
+  {
     type: "event",
     name: "SettleForwardedToAztec",
     inputs: [
@@ -305,6 +510,11 @@ export default [
   },
   {
     type: "error",
+    name: "InvalidRefundedOrderCommitment",
+    inputs: [],
+  },
+  {
+    type: "error",
     name: "InvalidSender",
     inputs: [],
   },
@@ -312,6 +522,28 @@ export default [
     type: "error",
     name: "InvalidStorageKey",
     inputs: [],
+  },
+  {
+    type: "error",
+    name: "OwnableInvalidOwner",
+    inputs: [
+      {
+        name: "owner",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "OwnableUnauthorizedAccount",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
   },
   {
     type: "error",
