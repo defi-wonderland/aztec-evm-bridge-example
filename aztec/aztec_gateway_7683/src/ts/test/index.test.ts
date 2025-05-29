@@ -1,7 +1,7 @@
 import { Fr, PXE, EthAddress, SponsoredFeePaymentMethod, Contract } from "@aztec/aztec.js"
 import { spawn } from "child_process"
 import { createEthereumChain, createExtendedL1Client, RollupContract } from "@aztec/ethereum"
-import { hexToBytes, padHex, sha256 } from "viem"
+import { hexToBytes, padHex } from "viem"
 import { poseidon2Hash, sha256ToField } from "@aztec/foundation/crypto"
 import { SponsoredFPCContract } from "@aztec/noir-contracts.js/SponsoredFPC"
 import { TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
