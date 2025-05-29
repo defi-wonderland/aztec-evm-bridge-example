@@ -1,16 +1,14 @@
 import "dotenv/config"
 import { AztecAddress, Contract, createLogger, Fr, sleep, SponsoredFeePaymentMethod } from "@aztec/aztec.js"
 import { createPublicClient, hexToBytes, http, padHex } from "viem"
-import { poseidon2Hash } from "@aztec/foundation/crypto"
 import { privateKeyToAccount } from "viem/accounts"
 import { optimismSepolia } from "viem/chains"
+import { TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
 
 import { getSponsoredFPCAddress } from "../fpc.js"
 import { getPxe, getWalletFromSecretKey } from "../utils.js"
 import { AztecGateway7683ContractArtifact } from "../../src/artifacts/AztecGateway7683.js"
 import { OrderData } from "../../src/ts/test/OrderData.js"
-import { parseFilledLog } from "../../src/ts/test/utils.js"
-import { TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
 
 const AZTEC_GATEWAY_7683 = process.env.AZTEC_GATEWAY_7683 as `0x${string}`
 const L2_GATEWAY_7683 = process.env.L2_GATEWAY_7683 as `0x${string}`
