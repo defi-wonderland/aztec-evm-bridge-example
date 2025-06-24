@@ -141,7 +141,7 @@ class SettlementService extends BaseService {
     try {
       this.logger.info(`forwarding settlement to Aztec for order ${order.orderId} ...`)
 
-      // NOTE: At the moment we support only Optimism Sepolia
+      // NOTE: At the moment we support only Base Sepolia
 
       const l2EvmClient = this.evmMultiClient.getClientByChain(this.l2EvmChain)
       const l1client = this.evmMultiClient.getClientByChain(this.l1Chain)

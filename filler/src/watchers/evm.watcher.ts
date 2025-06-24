@@ -1,6 +1,6 @@
 import winston from "winston"
 
-import type { PublicClient, Log } from "viem"
+import type { PublicClient, Log, Filter } from "viem"
 
 interface WatcherConfigs {
   service: string
@@ -66,8 +66,7 @@ class EvmWatcher {
         fromBlock,
         toBlock,
       })
-
-      const logs = (await this.client.getFilterLogs({ filter })) as Log[]
+      const logs = (await this.client.getFilterLogs({ filter: filter as Filter })) as Log[]
 
       if (logs.length) {
         this.logger.info(

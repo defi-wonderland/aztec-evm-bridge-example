@@ -3,17 +3,25 @@ export default [
     type: "constructor",
     inputs: [
       {
-        name: "forwarder",
-        type: "address",
-        internalType: "address",
-      },
-      {
         name: "permit2",
         type: "address",
         internalType: "address",
       },
     ],
     stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "AZTEC_CHAIN_ID",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "uint32",
+        internalType: "uint32",
+      },
+    ],
+    stateMutability: "view",
   },
   {
     type: "function",
@@ -24,19 +32,6 @@ export default [
         name: "",
         type: "bytes32",
         internalType: "bytes32",
-      },
-    ],
-    stateMutability: "view",
-  },
-  {
-    type: "function",
-    name: "FORWARDER",
-    inputs: [],
-    outputs: [
-      {
-        name: "",
-        type: "address",
-        internalType: "address",
       },
     ],
     stateMutability: "view",
@@ -121,6 +116,19 @@ export default [
   },
   {
     type: "function",
+    name: "aztecGateway7683",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
     name: "fill",
     inputs: [
       {
@@ -162,6 +170,38 @@ export default [
         name: "fillerData",
         type: "bytes",
         internalType: "bytes",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "filledOrdersCommitments",
+    inputs: [
+      {
+        name: "orderId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    outputs: [
+      {
+        name: "commitment",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "forwarder",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "address",
+        internalType: "address",
       },
     ],
     stateMutability: "view",
@@ -335,6 +375,197 @@ export default [
       },
     ],
     stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "owner",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "refund",
+    inputs: [
+      {
+        name: "_orders",
+        type: "tuple[]",
+        internalType: "struct OnchainCrossChainOrder[]",
+        components: [
+          {
+            name: "fillDeadline",
+            type: "uint32",
+            internalType: "uint32",
+          },
+          {
+            name: "orderDataType",
+            type: "bytes32",
+            internalType: "bytes32",
+          },
+          {
+            name: "orderData",
+            type: "bytes",
+            internalType: "bytes",
+          },
+        ],
+      },
+    ],
+    outputs: [],
+    stateMutability: "payable",
+  },
+  {
+    type: "function",
+    name: "refund",
+    inputs: [
+      {
+        name: "message",
+        type: "bytes",
+        internalType: "bytes",
+      },
+      {
+        name: "stateProofParams",
+        type: "tuple",
+        internalType: "struct StateValidator.StateProofParameters",
+        components: [
+          {
+            name: "beaconRoot",
+            type: "bytes32",
+            internalType: "bytes32",
+          },
+          {
+            name: "beaconOracleTimestamp",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "executionStateRoot",
+            type: "bytes32",
+            internalType: "bytes32",
+          },
+          {
+            name: "stateRootProof",
+            type: "bytes32[]",
+            internalType: "bytes32[]",
+          },
+        ],
+      },
+      {
+        name: "accountProofParams",
+        type: "tuple",
+        internalType: "struct StateValidator.AccountProofParameters",
+        components: [
+          {
+            name: "storageKey",
+            type: "bytes",
+            internalType: "bytes",
+          },
+          {
+            name: "storageValue",
+            type: "bytes",
+            internalType: "bytes",
+          },
+          {
+            name: "accountProof",
+            type: "bytes[]",
+            internalType: "bytes[]",
+          },
+          {
+            name: "storageProof",
+            type: "bytes[]",
+            internalType: "bytes[]",
+          },
+        ],
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "refund",
+    inputs: [
+      {
+        name: "_orders",
+        type: "tuple[]",
+        internalType: "struct GaslessCrossChainOrder[]",
+        components: [
+          {
+            name: "originSettler",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "user",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "nonce",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "originChainId",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "openDeadline",
+            type: "uint32",
+            internalType: "uint32",
+          },
+          {
+            name: "fillDeadline",
+            type: "uint32",
+            internalType: "uint32",
+          },
+          {
+            name: "orderDataType",
+            type: "bytes32",
+            internalType: "bytes32",
+          },
+          {
+            name: "orderData",
+            type: "bytes",
+            internalType: "bytes",
+          },
+        ],
+      },
+    ],
+    outputs: [],
+    stateMutability: "payable",
+  },
+  {
+    type: "function",
+    name: "refundedOrdersCommitments",
+    inputs: [
+      {
+        name: "orderId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    outputs: [
+      {
+        name: "commitment",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "renounceOwnership",
+    inputs: [],
+    outputs: [],
+    stateMutability: "nonpayable",
   },
   {
     type: "function",
@@ -646,6 +877,32 @@ export default [
   },
   {
     type: "function",
+    name: "setAztecGateway7683",
+    inputs: [
+      {
+        name: "aztecGateway7683_",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "setForwarder",
+    inputs: [
+      {
+        name: "forwarder_",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
     name: "settle",
     inputs: [
       {
@@ -706,6 +963,19 @@ export default [
             internalType: "bytes[]",
           },
         ],
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "transferOwnership",
+    inputs: [
+      {
+        name: "newOwner",
+        type: "address",
+        internalType: "address",
       },
     ],
     outputs: [],
@@ -872,6 +1142,19 @@ export default [
   },
   {
     type: "event",
+    name: "AztecGateway7683Set",
+    inputs: [
+      {
+        name: "aztecGateway7683",
+        type: "bytes32",
+        indexed: false,
+        internalType: "bytes32",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
     name: "Filled",
     inputs: [
       {
@@ -891,6 +1174,19 @@ export default [
         type: "bytes",
         indexed: false,
         internalType: "bytes",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "ForwarderSet",
+    inputs: [
+      {
+        name: "forwarder",
+        type: "address",
+        indexed: false,
+        internalType: "address",
       },
     ],
     anonymous: false,
@@ -1032,6 +1328,25 @@ export default [
             ],
           },
         ],
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "OwnershipTransferred",
+    inputs: [
+      {
+        name: "previousOwner",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "newOwner",
+        type: "address",
+        indexed: true,
+        internalType: "address",
       },
     ],
     anonymous: false,
@@ -1288,6 +1603,28 @@ export default [
   },
   {
     type: "error",
+    name: "OwnableInvalidOwner",
+    inputs: [
+      {
+        name: "owner",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "OwnableUnauthorizedAccount",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
     name: "SafeERC20FailedOperation",
     inputs: [
       {
@@ -1305,11 +1642,6 @@ export default [
   {
     type: "error",
     name: "UnexpectedString",
-    inputs: [],
-  },
-  {
-    type: "error",
-    name: "InvalidOrderType",
     inputs: [],
   },
 ]

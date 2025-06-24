@@ -54,7 +54,10 @@ export const initPxe = async () => {
     dataDirectory: "store",
     dataStoreMapSizeKB: 1e6,
   })
-  pxe = await createPXEService(node, fullConfig, true, store)
+  pxe = await createPXEService(node, fullConfig, {
+    store,
+    useLogSuffix: true,
+  })
   await waitForPXE(pxe)
 }
 
