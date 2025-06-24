@@ -25,6 +25,10 @@ This guide walks you through:
 aztec-nargo compile
 ```
 
+```bash
+yarn install
+```
+
 ### ⚠️ Important Warning
 
 Before running the above command make sure to run the following commands:
@@ -42,13 +46,42 @@ aztec-nargo compile --package token_contract
 cp ~/nargo/github.com/AztecProtocol/aztec-packages/v0.87.9/noir-projects/noir-contracts/target/token_contract-Token.json ./target/token_contract-Token.json
 ```
 
-If you see the following error when compiling:
+
+## 🧪 Interacting with the Bridge
+
+Before interacting with the bridge, ensure you have created a `.env` file based on the structure provided in `.env.example`. You can get the addresses [HERE](https://substance-labs.gitbook.io/aztec-evm-bridge/deployments).
+
+### ➡️ Aztec Testnet → Base Sepolia
+
+To test the bridge flow **from Aztec Testnet to Base Sepolia**, run:
 
 ```bash
-src/artifacts/Token.ts:26:3 - error TS2305: Module '"@aztec/aztec.js"' has no exported member 'L1EventPayload'.
+node --no-warnings --loader ts-node/esm scripts/e2e/aztec-to-evm.ts 
 ```
- 
-Go to `src/artifacts/Token.ts` and remove the **`L1EventPayload`** import.
+
+### ⬅️ Base Sepolia → Aztec Testnet
+
+To test the bridge flow **from Base Sepolia to Aztec Testnet**, run:
+
+```bash
+node --no-warnings --loader ts-node/esm scripts/e2e/evm-to-aztec.ts 
+```
+
+### ⚠️ Important Notes
+
+* These scripts interact with the bridge in private mode. The bridge also supports public mode, and scripts for that will be available soon.
+* If orders are not being filled, it's likely that no fillers are currently online. To run your own filler instance, refer to the `README.md` file inside the `filler/` directory for setup instructions.
+* You must be using a **valid token**.
+
+### 🪙 Deploying a Token on Aztec
+
+If you need to deploy a test token on Aztec, run:
+
+```bash
+node --no-warnings --loader ts-node/esm scripts/deploy-token.ts 
+```
+
+To modify token parameters, edit the `deploy-token.ts` file directly.
 
 
 ## 🧪 Testing
@@ -60,7 +93,3 @@ yarn test:js
 ```
 
 Make sure you have installed the dependencies beforehand with:
-
-```bash
-yarn install
-```
