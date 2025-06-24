@@ -1,9 +1,9 @@
 import "dotenv/config"
 import { AztecAddress, Contract, createLogger, Fr, sleep, SponsoredFeePaymentMethod } from "@aztec/aztec.js"
-import { createWalletClient, hexToBytes, http, padHex } from "viem"
+import { createPublicClient, createWalletClient, erc20Abi, hexToBytes, http, padHex } from "viem"
 import { poseidon2Hash } from "@aztec/foundation/crypto"
 import { privateKeyToAccount } from "viem/accounts"
-import { optimismSepolia } from "viem/chains"
+import * as chains from "viem/chains"
 
 import { getSponsoredFPCAddress } from "../fpc.js"
 import { getPxe, getWalletFromSecretKey } from "../utils.js"
@@ -22,14 +22,31 @@ const EVM_PK = process.env.EVM_PK as `0x${string}`
 // NOTE: make sure that the filler is running
 async function main(): Promise<void> {
   const logger = createLogger("e2e:evm-to-aztec")
+
+  const l2EvmChain = Object.values(chains).find(
+    ({ id }: any) => id.toString() === (process.env.EVM_L2_CHAIN_ID as string),
+  ) as chains.Chain
   const evmWalletClient = createWalletClient({
     account: privateKeyToAccount(EVM_PK),
-    chain: optimismSepolia,
+    chain: l2EvmChain,
+    transport: http(),
+  })
+  const evmPublicClient = createPublicClient({
+    chain: l2EvmChain,
     transport: http(),
   })
 
-  const fillDeadline = 2 ** 32 - 1
   const amount = 100n
+  logger.info('approving tokens ...')
+  let txHash = await evmWalletClient.writeContract({
+    address: L2_EVM_TOKEN,
+    abi: erc20Abi,
+    functionName: "approve",
+    args: [L2_GATEWAY_7683, amount]
+  })
+  await evmPublicClient.waitForTransactionReceipt({ hash: txHash })
+
+  const fillDeadline = 2 ** 32 - 1
   const secret = Fr.random()
   const secretHash = await poseidon2Hash([secret])
   const nonce = Fr.random()
@@ -51,8 +68,8 @@ async function main(): Promise<void> {
   const orderId = await orderData.id()
 
   // NOTE: make sure to approve the tokens
-  logger.info("creating open order on op sepolia ...")
-  const txHash = await evmWalletClient.writeContract({
+  logger.info(`creating open order on ${l2EvmChain.name} ...`)
+  txHash = await evmWalletClient.writeContract({
     address: L2_GATEWAY_7683,
     functionName: "open",
     abi: [

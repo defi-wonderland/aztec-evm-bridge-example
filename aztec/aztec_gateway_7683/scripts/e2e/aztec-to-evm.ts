@@ -2,7 +2,7 @@ import "dotenv/config"
 import { AztecAddress, Contract, createLogger, Fr, sleep, SponsoredFeePaymentMethod } from "@aztec/aztec.js"
 import { createPublicClient, hexToBytes, http, padHex } from "viem"
 import { privateKeyToAccount } from "viem/accounts"
-import { optimismSepolia } from "viem/chains"
+import * as chains from "viem/chains"
 import { TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
 
 import { getSponsoredFPCAddress } from "../fpc.js"
@@ -21,8 +21,12 @@ const EVM_PK = process.env.EVM_PK as `0x${string}`
 // NOTE: make sure that the filler is running
 async function main(): Promise<void> {
   const logger = createLogger("e2e:evm-to-aztec")
+
+  const l2EvmChain = Object.values(chains).find(
+    ({ id }: any) => id.toString() === (process.env.EVM_L2_CHAIN_ID as string),
+  ) as chains.Chain
   const evmClient = createPublicClient({
-    chain: optimismSepolia,
+    chain: l2EvmChain,
     transport: http(),
   })
 

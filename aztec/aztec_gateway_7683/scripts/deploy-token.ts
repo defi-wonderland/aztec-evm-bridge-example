@@ -13,6 +13,7 @@ const main = async () => {
     secretKey: process.env.AZTEC_SECRET_KEY as string,
     salt: process.env.AZTEC_KEY_SALT as string,
     pxe,
+    deploy: false,
   })
 
   const token = await TokenContract.deploy(wallet, wallet.getAddress(), "Wrapper Ethereum", "WETH", 18)
