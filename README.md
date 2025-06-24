@@ -2,7 +2,7 @@
 
 ## 🌉 Overview
 
-The **Aztec-EVM Bridge** is a privacy-preserving, trust-minimized cross-chain intent execution framework that facilitates secure transactions between the [Aztec Network](https://aztec.network/) and Ethereum Virtual Machine (EVM)-compatible Layer 2 (L2) solutions such as **Optimism**. This project aligns with the proposal outlined in the Aztec Network forum: [Confidential Cross-Chain Bridging: Enabling Private and Trust-Minimized Interoperability for Aztec](https://forum.aztec.network/t/confidential-cross-chain-bridging-enabling-private-and-trust-minimized-interoperability-for-aztec/7523).
+The **Aztec-EVM Bridge** is a privacy-preserving, trust-minimized cross-chain intent execution framework that facilitates secure transactions between the [Aztec Network](https://aztec.network/) and Ethereum Virtual Machine (EVM)-compatible Layer 2 (L2) solutions such as **Base**.<br/> This project aligns with the proposal outlined in the Aztec Network forum:<br/>[Confidential Cross-Chain Bridging: Enabling Private and Trust-Minimized Interoperability for Aztec](https://forum.aztec.network/t/confidential-cross-chain-bridging-enabling-private-and-trust-minimized-interoperability-for-aztec/7523).<br/> 📚 Full documentation is available at: <br/> 👉 [https://substance-labs.gitbook.io/aztec-evm-bridge/](https://substance-labs.gitbook.io/aztec-evm-bridge/)
 
 ## ✨ Features
 
