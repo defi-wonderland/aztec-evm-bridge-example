@@ -22,7 +22,10 @@ export const getPXEs = async (names: string[]): Promise<PXE[]> => {
       dataDirectory: "store",
       dataStoreMapSizeKB: 1e6,
     })
-    const pxe = await createPXEService(node, fullConfig, true, store)
+    const pxe = await createPXEService(node, fullConfig, {
+      store,
+      useLogSuffix: true,
+    })
     await waitForPXE(pxe)
     pxes.push(pxe)
   }
@@ -42,7 +45,10 @@ export const getPxe = async () => {
     dataDirectory: "store",
     dataStoreMapSizeKB: 1e6,
   })
-  const pxe = await createPXEService(node, fullConfig, true, store)
+  const pxe = await createPXEService(node, fullConfig, {
+    store,
+    useLogSuffix: true,
+  })
   await waitForPXE(pxe)
 
   const fpcContractInstance = await getSponsoredFPCInstance()
