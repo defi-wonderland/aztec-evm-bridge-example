@@ -9,7 +9,7 @@
     "prettier:check": "prettier --check \"**/*.{js,json,md,sol,ts,yml}\"",
     "prettier:write": "prettier --write \"**/*.{js,json,md,sol,ts,yml}\""
   },
-  "author": "Alessandro Manfredi",
+  "author": "Substance Labs",
   "license": "MIT",
   "description": "",
   "dependencies": {
