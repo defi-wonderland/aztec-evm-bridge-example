@@ -49,7 +49,12 @@ cp ~/nargo/github.com/AztecProtocol/aztec-packages/v0.87.9/noir-projects/noir-co
 
 ## 🧪 Interacting with the Bridge
 
-Before interacting with the bridge, ensure you have created a `.env` file based on the structure provided in `.env.example`. You can get the addresses [HERE](https://substance-labs.gitbook.io/aztec-evm-bridge/deployments).
+Before interacting with the bridge, ensure you have created a `.env` file based on the structure provided in `.env.example`. You can get the addresses [HERE](https://substance-labs.gitbook.io/aztec-evm-bridge/deployments). Then:
+
+```bash
+aztec-nargo compile
+aztec codegen target --outdir src/artifacts
+```
 
 ### ➡️ Aztec Testnet → Base Sepolia
 
