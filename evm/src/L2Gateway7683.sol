@@ -11,8 +11,8 @@ contract L2Gateway7683 is IL2Gateway7683, BasicSwap7683, Ownable {
     using BytesReader for bytes;
 
     uint32 public constant AZTEC_CHAIN_ID = 999999;
-    uint256 private constant FORWARDER_SETTLED_ORDERS_SLOT = 0;
-    uint256 private constant FORWARDER_REFUNED_ORDERS_SLOT = 1;
+    uint256 private constant FORWARDER_SETTLED_ORDERS_SLOT = 2;
+    uint256 private constant FORWARDER_REFUNED_ORDERS_SLOT = 3;
     bytes32 private constant SETTLE_ORDER_TYPE = sha256(abi.encodePacked("SETTLE_ORDER_TYPE"));
     bytes32 private constant REFUND_ORDER_TYPE = sha256(abi.encodePacked("REFUND_ORDER_TYPE"));
     address public forwarder;

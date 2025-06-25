@@ -18,7 +18,7 @@ export const PORTAL_ADDRESS = process.env.FORWARDER_ADDRESS as `0x${string}`
 export const FORWARDER_CHAIN_ID = 11155111
 export const AZTEC_VERSION = 4189337207 // TODO read it from the RollupContract
 
-export const FORWARDER_SETTLE_ORDER_SLOTS = 0n
+export const FORWARDER_SETTLE_ORDER_SLOT = 2n
 export const L2_GATEWAY_FILLED_ORDERS_SLOT = 51n
 
 export const OP_STACK_ANCHOR_REGISTRY_OP_SEPOLIA = process.env.OP_STACK_ANCHOR_REGISTRY_OP_SEPOLIA as `0x${string}`

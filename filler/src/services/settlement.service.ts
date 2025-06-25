@@ -12,7 +12,7 @@ import {
   AZTEC_7683_CHAIN_ID,
   AZTEC_VERSION,
   FORWARDER_CHAIN_ID,
-  FORWARDER_SETTLE_ORDER_SLOTS,
+  FORWARDER_SETTLE_ORDER_SLOT,
   L2_GATEWAY_FILLED_ORDERS_SLOT,
   OP_STACK_ANCHOR_REGISTRY_OP_SEPOLIA,
   ORDER_STATUS_FILLED,
@@ -369,7 +369,7 @@ class SettlementService extends BaseService {
       const storageKey = keccak256(
         encodeAbiParameters(
           [{ type: "bytes32" }, { type: "uint256" }],
-          [messageHash.toString(), FORWARDER_SETTLE_ORDER_SLOTS],
+          [messageHash.toString(), FORWARDER_SETTLE_ORDER_SLOT],
         ),
       )
       const proof = await l1Client.getProof({
