@@ -26,7 +26,7 @@ async function main(): Promise<void> {
   const paymentMethod = new SponsoredFeePaymentMethod(sponsoredFPC.address)
   const user = await getRandomWallet({ paymentMethod, pxe: pxe1 })
   const filler = await getRandomWallet({ paymentMethod, pxe: pxe2 })
-  const deployer = await getRandomWallet({ paymentMethod, pxe: pxe2 })
+  const deployer = await getRandomWallet({ paymentMethod, pxe: pxe3 })
 
   await user.registerSender(deployer.getAddress())
   await filler.registerSender(deployer.getAddress())
