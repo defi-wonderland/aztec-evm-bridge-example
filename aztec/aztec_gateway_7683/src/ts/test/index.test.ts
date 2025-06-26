@@ -50,7 +50,7 @@ const setup = async (pxes: PXE[]) => {
   const paymentMethod = new SponsoredFeePaymentMethod(sponsoredFPC.address)
   const user = await getRandomWallet({ paymentMethod, pxe: pxe1 })
   const filler = await getRandomWallet({ paymentMethod, pxe: pxe2 })
-  const deployer = await getRandomWallet({ paymentMethod, pxe: pxe2 })
+  const deployer = await getRandomWallet({ paymentMethod, pxe: pxe3 })
 
   await user.registerSender(deployer.getAddress())
   await filler.registerSender(deployer.getAddress())
@@ -315,7 +315,7 @@ describe("AztecGateway7683", () => {
     expect(parsedResolvedCrossChainOrder.minReceived[0].token).toBe(token.address.toString())
     expect(parsedResolvedCrossChainOrder.user).toBe(PRIVATE_SENDER)
 
-    const balancePre = await token.withWallet(deployer).methods.balance_of_private(filler.getAddress()).simulate()
+    const balancePre = await token.withWallet(filler).methods.balance_of_private(filler.getAddress()).simulate()
     await gateway
       .withWallet(filler)
       .methods.settle_private(
@@ -326,7 +326,7 @@ describe("AztecGateway7683", () => {
       )
       .send({ fee: { paymentMethod } })
       .wait()
-    const balancePost = await token.withWallet(deployer).methods.balance_of_private(filler.getAddress()).simulate()
+    const balancePost = await token.withWallet(filler).methods.balance_of_private(filler.getAddress()).simulate()
     expect(balancePost).toBe(balancePre + amountIn)
 
     fromBlock = await pxe1.getBlockNumber()
