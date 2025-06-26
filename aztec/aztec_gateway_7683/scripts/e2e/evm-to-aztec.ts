@@ -1,15 +1,24 @@
 import "dotenv/config"
-import { AztecAddress, Contract, createLogger, Fr, sleep, SponsoredFeePaymentMethod } from "@aztec/aztec.js"
+import {
+  AztecAddress,
+  Contract,
+  ContractInstanceWithAddress,
+  createLogger,
+  Fr,
+  sleep,
+  SponsoredFeePaymentMethod,
+} from "@aztec/aztec.js"
 import { createPublicClient, createWalletClient, erc20Abi, hexToBytes, http, padHex } from "viem"
 import { poseidon2Hash } from "@aztec/foundation/crypto"
 import { privateKeyToAccount } from "viem/accounts"
 import * as chains from "viem/chains"
 
-import { getSponsoredFPCAddress } from "../fpc.js"
-import { getPxe, getWalletFromSecretKey } from "../utils.js"
+import { getSponsoredFPCAddress, getSponsoredFPCInstance } from "../fpc.js"
+import { getNode, getPxe, getWalletFromSecretKey } from "../utils.js"
 import { AztecGateway7683ContractArtifact } from "../../src/artifacts/AztecGateway7683.js"
 import { OrderData } from "../../src/ts/test/OrderData.js"
 import { parseFilledLog } from "../../src/ts/test/utils.js"
+import { SponsoredFPCContractArtifact } from "@aztec/noir-contracts.js/SponsoredFPC"
 
 const AZTEC_GATEWAY_7683 = process.env.AZTEC_GATEWAY_7683 as `0x${string}`
 const L2_GATEWAY_7683 = process.env.L2_GATEWAY_7683 as `0x${string}`
@@ -37,12 +46,12 @@ async function main(): Promise<void> {
   })
 
   const amount = 100n
-  logger.info('approving tokens ...')
+  logger.info("approving tokens ...")
   let txHash = await evmWalletClient.writeContract({
     address: L2_EVM_TOKEN,
     abi: erc20Abi,
     functionName: "approve",
-    args: [L2_GATEWAY_7683, amount]
+    args: [L2_GATEWAY_7683, amount],
   })
   await evmPublicClient.waitForTransactionReceipt({ hash: txHash })
 
@@ -116,6 +125,8 @@ async function main(): Promise<void> {
   logger.info(`order created. tx hash: ${txHash}`)
   logger.info("waiting for the filler to fill the order ...")
 
+  const aztecGateway7683Address = AztecAddress.fromString(AZTEC_GATEWAY_7683)
+
   const pxe = await getPxe()
   const paymentMethod = new SponsoredFeePaymentMethod(await getSponsoredFPCAddress())
   const aztecWalllet = await getWalletFromSecretKey({
@@ -123,12 +134,18 @@ async function main(): Promise<void> {
     salt: process.env.AZTEC_KEY_SALT as string,
     pxe,
   })
-  await aztecWalllet.registerSender(AztecAddress.fromString(AZTEC_GATEWAY_7683))
-  const gateway = await Contract.at(
-    AztecAddress.fromString(AZTEC_GATEWAY_7683),
-    AztecGateway7683ContractArtifact,
-    aztecWalllet,
-  )
+
+  const node = getNode()
+  await pxe.registerContract({
+    instance: (await node.getContract(aztecGateway7683Address)) as ContractInstanceWithAddress,
+    artifact: AztecGateway7683ContractArtifact,
+  })
+  await pxe.registerContract({
+    instance: await getSponsoredFPCInstance(),
+    artifact: SponsoredFPCContractArtifact,
+  })
+
+  const gateway = await Contract.at(aztecGateway7683Address, AztecGateway7683ContractArtifact, aztecWalllet)
 
   while (true) {
     const status = await gateway.methods.get_order_status(orderId).simulate()
@@ -144,7 +161,7 @@ async function main(): Promise<void> {
           // TODO: understand why if i use fromBlock and toBlock i always receive the penultimante log.
           // Basically i never receive the last one even if block numbers are up to date
           const { logs } = await pxe.getPublicLogs({
-            contractAddress: AztecAddress.fromString(AZTEC_GATEWAY_7683),
+            contractAddress: aztecGateway7683Address,
           })
 
           const parsedLogs = logs.map(({ log }) => parseFilledLog(log.fields))

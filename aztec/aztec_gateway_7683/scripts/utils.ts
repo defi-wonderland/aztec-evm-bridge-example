@@ -32,9 +32,11 @@ export const getPXEs = async (names: string[]): Promise<PXE[]> => {
   return pxes
 }
 
+export const getNode = () =>
+  createAztecNodeClient(process.env.PXE_URL ?? "https://aztec-alpha-testnet-fullnode.zkv.xyz")
+
 export const getPxe = async () => {
-  const url = process.env.PXE_URL ?? "https://aztec-alpha-testnet-fullnode.zkv.xyz"
-  const node = createAztecNodeClient(url)
+  const node = getNode()
   const fullConfig = {
     ...getPXEServiceConfig(),
     l1Contracts: await node.getL1ContractAddresses(),
@@ -86,9 +88,11 @@ export const getWalletFromSecretKey = async ({
   const signingKey = deriveSigningKey(secretKey)
   const account = await getSchnorrAccount(pxe, secretKey, signingKey, salt)
   if (deploy) await account.deploy({ fee: { paymentMethod } }).wait()
+  const wallet = await account.getWallet()
+  await pxe.registerAccount(secretKey, (await wallet.getCompleteAddress()).partialAddress)
   await pxe.registerContract({
     instance: account.getInstance(),
     artifact: SchnorrAccountContractArtifact,
   })
-  return await account.getWallet()
+  return wallet
 }

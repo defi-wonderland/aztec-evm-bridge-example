@@ -1,14 +1,25 @@
 import "dotenv/config"
-import { AztecAddress, Contract, createLogger, Fr, sleep, SponsoredFeePaymentMethod } from "@aztec/aztec.js"
+import {
+  AztecAddress,
+  Contract,
+  ContractInstanceWithAddress,
+  createLogger,
+  Fr,
+  getContractInstanceFromDeployParams,
+  sleep,
+  SponsoredFeePaymentMethod,
+} from "@aztec/aztec.js"
 import { createPublicClient, hexToBytes, http, padHex } from "viem"
 import { privateKeyToAccount } from "viem/accounts"
 import * as chains from "viem/chains"
 import { TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
+import { SponsoredFPCContractArtifact } from "@aztec/noir-contracts.js/SponsoredFPC"
 
-import { getSponsoredFPCAddress } from "../fpc.js"
-import { getPxe, getWalletFromSecretKey } from "../utils.js"
+import { getSponsoredFPCAddress, getSponsoredFPCInstance } from "../fpc.js"
+import { getNode, getPxe, getWalletFromSecretKey } from "../utils.js"
 import { AztecGateway7683ContractArtifact } from "../../src/artifacts/AztecGateway7683.js"
 import { OrderData } from "../../src/ts/test/OrderData.js"
+import { SchnorrAccountContractArtifact } from "@aztec/accounts/schnorr"
 
 const AZTEC_GATEWAY_7683 = process.env.AZTEC_GATEWAY_7683 as `0x${string}`
 const L2_GATEWAY_7683 = process.env.L2_GATEWAY_7683 as `0x${string}`
@@ -32,18 +43,32 @@ async function main(): Promise<void> {
 
   const pxe = await getPxe()
   const paymentMethod = new SponsoredFeePaymentMethod(await getSponsoredFPCAddress())
-  const aztecWalllet = await getWalletFromSecretKey({
+  const aztecWallet = await getWalletFromSecretKey({
     secretKey: process.env.AZTEC_SECRET_KEY as string,
     salt: process.env.AZTEC_KEY_SALT as string,
     pxe,
+    deploy: false,
   })
-  await aztecWalllet.registerSender(AztecAddress.fromString(AZTEC_GATEWAY_7683))
-  const gateway = await Contract.at(
-    AztecAddress.fromString(AZTEC_GATEWAY_7683),
-    AztecGateway7683ContractArtifact,
-    aztecWalllet,
-  )
-  const token = await Contract.at(AztecAddress.fromString(AZTEC_TOKEN), TokenContractArtifact, aztecWalllet)
+
+  const aztecGateway7683Address = AztecAddress.fromString(AZTEC_GATEWAY_7683)
+  const aztecTokenAddress = AztecAddress.fromString(AZTEC_TOKEN)
+
+  const node = getNode()
+  await pxe.registerContract({
+    instance: (await node.getContract(aztecGateway7683Address)) as ContractInstanceWithAddress,
+    artifact: AztecGateway7683ContractArtifact,
+  })
+  await pxe.registerContract({
+    instance: (await node.getContract(aztecTokenAddress)) as ContractInstanceWithAddress,
+    artifact: TokenContractArtifact,
+  })
+  await pxe.registerContract({
+    instance: await getSponsoredFPCInstance(),
+    artifact: SponsoredFPCContractArtifact,
+  })
+
+  const gateway = await Contract.at(aztecGateway7683Address, AztecGateway7683ContractArtifact, aztecWallet)
+  const token = await Contract.at(aztecTokenAddress, TokenContractArtifact, aztecWallet)
 
   const fillDeadline = 2 ** 32 - 1
   const amount = 100n
@@ -74,9 +99,9 @@ async function main(): Promise<void> {
     })
     .with({
       authWitnesses: [
-        await aztecWalllet.createAuthWit({
+        await aztecWallet.createAuthWit({
           caller: gateway.address,
-          action: token.methods.transfer_to_public(aztecWalllet.getAddress(), gateway.address, amount, nonce),
+          action: token.methods.transfer_to_public(aztecWallet.getAddress(), gateway.address, amount, nonce),
         }),
       ],
     })
