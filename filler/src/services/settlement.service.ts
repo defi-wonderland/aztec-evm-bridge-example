@@ -14,16 +14,18 @@ import {
   FORWARDER_CHAIN_ID,
   FORWARDER_SETTLE_ORDER_SLOT,
   L2_GATEWAY_FILLED_ORDERS_SLOT,
-  OP_STACK_ANCHOR_REGISTRY_OP_SEPOLIA,
+  OP_STACK_ANCHOR_REGISTRY_ADDRESS,
   ORDER_STATUS_FILLED,
   ORDER_STATUS_SETTLE_FORWARDED,
   ORDER_STATUS_SETTLED,
-  PORTAL_ADDRESS,
+  FORWARDER_ADDRESS,
   SETTLE_ORDER_TYPE,
+  AZTEC_ROLLUP_CONTRACT_L1_ADDRESS,
 } from "../constants"
 import forwarderAbi from "../abis/forwarder"
 import l2Gateway7683Abi from "../abis/l2Gateway7683"
 import anchorRegistryAbi from "../abis/anchorRegistry"
+import rollupAbi from "../abis/rollup"
 import { AztecGateway7683Contract } from "../artifacts/AztecGateway7683/AztecGateway7683"
 
 import type { Chain } from "viem"
@@ -150,7 +152,7 @@ class SettlementService extends BaseService {
         abi: anchorRegistryAbi,
         functionName: "getAnchorRoot",
         args: [],
-        address: OP_STACK_ANCHOR_REGISTRY_OP_SEPOLIA,
+        address: OP_STACK_ANCHOR_REGISTRY_ADDRESS,
       })) as [`0x${string}`, bigint]
 
       const storageKey = keccak256(
@@ -233,23 +235,35 @@ class SettlementService extends BaseService {
       const l2ToL1Message = sha256ToField([
         Buffer.from(this.aztecGatewayAddress.slice(2), "hex"),
         new Fr(AZTEC_VERSION).toBuffer(),
-        EthAddress.fromString(PORTAL_ADDRESS).toBuffer32(),
+        EthAddress.fromString(FORWARDER_ADDRESS).toBuffer32(),
         new Fr(FORWARDER_CHAIN_ID).toBuffer(),
         messageHash.toBuffer(),
       ])
 
       const orderSettlementBlockNumber = await gateway.methods
         .get_order_settlement_block_number(Fr.fromBufferReduce(Buffer.from(order.orderId.slice(2), "hex")))
-        .simulate()
+        .simulate() as bigint
 
-      // TODO: ROLLUP.getProvenBlockNumber()
+      const l1client = this.evmMultiClient.getClientByChain(this.l1Chain)
+      const provenBlockNumber = (await l1client.readContract({
+        address: AZTEC_ROLLUP_CONTRACT_L1_ADDRESS,
+        args: [],
+        abi: rollupAbi,
+        functionName: "getProvenBlockNumber",
+      })) as bigint
+
+      if (orderSettlementBlockNumber > provenBlockNumber) {
+        this.logger.info(
+          `cannot forward settlement to L2 for order ${order.orderId} because the corresponding block number ${orderSettlementBlockNumber} is > than the last proven ${provenBlockNumber} ...`,
+        )
+        return
+      }
 
       const [l2ToL1MessageIndex, siblingPath] = await this.pxe.getL2ToL1MembershipWitness(
-        parseInt(orderSettlementBlockNumber),
+        parseInt(orderSettlementBlockNumber.toString()),
         l2ToL1Message,
       )
 
-      const l1client = this.evmMultiClient.getClientByChain(this.l1Chain)
       // @ts-ignore
       const forwardSettleTxHash = await l1client.writeContract({
         abi: forwarderAbi,
