@@ -148,12 +148,20 @@ class SettlementService extends BaseService {
       const l2EvmClient = this.evmMultiClient.getClientByChain(this.l2EvmChain)
       const l1client = this.evmMultiClient.getClientByChain(this.l1Chain)
 
-      const [_, l2EvmblockNumber] = (await l1client.readContract({
+      const [_, l2EvmAnchorRootblockNumber] = (await l1client.readContract({
         abi: anchorRegistryAbi,
         functionName: "getAnchorRoot",
         args: [],
         address: OP_STACK_ANCHOR_REGISTRY_ADDRESS,
       })) as [`0x${string}`, bigint]
+
+      const receipt = await l2EvmClient.getTransactionReceipt({ hash: order.fillTxHash as `0x${string}` })
+      if (receipt.blockNumber > l2EvmAnchorRootblockNumber) {
+        this.logger.info(
+          `cannot forward settlement to Aztec for order ${order.orderId} because the corresponding block number ${receipt.blockNumber} is > than the anchor root one ${l2EvmAnchorRootblockNumber} ...`,
+        )
+        return
+      }
 
       const storageKey = keccak256(
         encodeAbiParameters([{ type: "bytes32" }, { type: "uint256" }], [order.orderId, L2_GATEWAY_FILLED_ORDERS_SLOT]),
@@ -161,7 +169,7 @@ class SettlementService extends BaseService {
 
       const proof = await l2EvmClient.request({
         method: "eth_getProof",
-        params: [this.l2EvmGatewayAddress, [storageKey], `0x${l2EvmblockNumber.toString(16)}`],
+        params: [this.l2EvmGatewayAddress, [storageKey], `0x${l2EvmAnchorRootblockNumber.toString(16)}`],
       })
 
       const accountProofParameters = {
@@ -169,10 +177,6 @@ class SettlementService extends BaseService {
         storageValue: proof.storageProof[0]!.value,
         accountProof: proof.accountProof,
         storageProof: proof.storageProof[0]!.proof,
-      }
-      if (accountProofParameters.storageProof.length === 0) {
-        this.logger.info(`anchor root not updated yet. skipping for now ...`)
-        return
       }
 
       // @ts-ignore
@@ -240,9 +244,9 @@ class SettlementService extends BaseService {
         messageHash.toBuffer(),
       ])
 
-      const orderSettlementBlockNumber = await gateway.methods
+      const orderSettlementBlockNumber = (await gateway.methods
         .get_order_settlement_block_number(Fr.fromBufferReduce(Buffer.from(order.orderId.slice(2), "hex")))
-        .simulate() as bigint
+        .simulate()) as bigint
 
       const l1client = this.evmMultiClient.getClientByChain(this.l1Chain)
       const provenBlockNumber = (await l1client.readContract({
