@@ -13,7 +13,7 @@ yarn install
 
 ## 🔧 Usage
 
-Run the project with:
+Before starting it, ensure you have created a `.env` file based on the structure provided in `.env.example`. Then:
 
 ```sh
 yarn start
