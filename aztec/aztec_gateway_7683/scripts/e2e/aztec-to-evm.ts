@@ -5,7 +5,6 @@ import {
   ContractInstanceWithAddress,
   createLogger,
   Fr,
-  getContractInstanceFromDeployParams,
   sleep,
   SponsoredFeePaymentMethod,
 } from "@aztec/aztec.js"
@@ -19,7 +18,6 @@ import { getSponsoredFPCAddress, getSponsoredFPCInstance } from "../fpc.js"
 import { getNode, getPxe, getWalletFromSecretKey } from "../utils.js"
 import { AztecGateway7683ContractArtifact } from "../../src/artifacts/AztecGateway7683.js"
 import { OrderData } from "../../src/ts/test/OrderData.js"
-import { SchnorrAccountContractArtifact } from "@aztec/accounts/schnorr"
 
 const AZTEC_GATEWAY_7683 = process.env.AZTEC_GATEWAY_7683 as `0x${string}`
 const L2_GATEWAY_7683 = process.env.L2_GATEWAY_7683 as `0x${string}`
