@@ -340,7 +340,7 @@ describe("AztecGateway7683", () => {
     expect(parsedSettledLog.receiver).toBe(filler.getAddress().toString())
   })
 
-  it("should fill a public order and send the settlement message to the forwarder via portal", async () => {
+  it("should fill a public order and send the settlement message to the forwarder", async () => {
     const [pxe1] = pxes
     const { token, gateway, wallets, paymentMethod } = await setup(pxes)
     const [user, filler, deployer] = wallets
@@ -426,7 +426,7 @@ describe("AztecGateway7683", () => {
     expect(siblingPath.pathSize).toBe(1)
   })
 
-  it("should fill a private order and send the settlement message to the forwarder via portal", async () => {
+  it("should fill a private order and send the settlement message to the forwarder", async () => {
     const [pxe1] = pxes
     const { token, gateway, wallets, paymentMethod } = await setup(pxes)
     const [user, filler] = wallets

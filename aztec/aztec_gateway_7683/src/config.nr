@@ -7,5 +7,5 @@ use std::meta::derive;
 pub struct Config {
     pub l2Gateway: EthAddress,
     pub l2GatewayDomain: u32,
-    pub portal: EthAddress,
+    pub forwarder: EthAddress,
 }

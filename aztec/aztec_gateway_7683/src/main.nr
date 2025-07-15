@@ -63,8 +63,8 @@ pub contract AztecGateway7683 {
 
     #[public]
     #[initializer]
-    fn constructor(l2Gateway: EthAddress, l2GatewayDomain: u32, portal: EthAddress) {
-        storage.config.initialize(Config { l2Gateway, l2GatewayDomain, portal });
+    fn constructor(l2Gateway: EthAddress, l2GatewayDomain: u32, forwarder: EthAddress) {
+        storage.config.initialize(Config { l2Gateway, l2GatewayDomain, forwarder });
     }
 
     #[private]
@@ -147,7 +147,7 @@ pub contract AztecGateway7683 {
         context.consume_l1_to_l2_message(
             _get_refund_content_hash(order_id_bytes),
             Field::from_be_bytes(SECRET),
-            storage.config.read().portal,
+            storage.config.read().forwarder,
             message_leaf_index,
         );
 
@@ -200,7 +200,7 @@ pub contract AztecGateway7683 {
         context.consume_l1_to_l2_message(
             _get_refund_content_hash(order_id_bytes),
             Field::from_be_bytes(SECRET),
-            storage.config.read().portal,
+            storage.config.read().forwarder,
             message_leaf_index,
         );
 
@@ -392,7 +392,7 @@ pub contract AztecGateway7683 {
         assert(storage.order_status.at(order_id).read() == UNKNOWN, "Invalid status");
         assert(context.timestamp() as u32 > order_data.fill_deadline, "Order not expired");
         context.message_portal(
-            storage.config.read().portal,
+            storage.config.read().forwarder,
             _get_refund_content_hash(order_id_bytes),
         );
     }
@@ -426,7 +426,7 @@ pub contract AztecGateway7683 {
         context.consume_l1_to_l2_message(
             _get_settle_content_hash(order_id_bytes, filler_data_bytes),
             Field::from_be_bytes(SECRET),
-            storage.config.read().portal,
+            storage.config.read().forwarder,
             message_leaf_index,
         );
 
@@ -478,7 +478,7 @@ pub contract AztecGateway7683 {
         context.consume_l1_to_l2_message(
             _get_settle_content_hash(order_id_bytes, filler_data_bytes),
             Field::from_be_bytes(SECRET),
-            storage.config.read().portal,
+            storage.config.read().forwarder,
             message_leaf_index,
         );
 
@@ -574,7 +574,7 @@ pub contract AztecGateway7683 {
     #[internal]
     fn _trigger_settlement(order_id: Field, content_hash: Field) {
         storage.orders_settlement_block_numbers.at(order_id).write(context.block_number());
-        context.message_portal(storage.config.read().portal, content_hash);
+        context.message_portal(storage.config.read().forwarder, content_hash);
     }
 
     #[public]
