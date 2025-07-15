@@ -63,7 +63,7 @@ export class AztecGateway7683Contract extends ContractBase {
     wallet: Wallet,
     l2Gateway: EthAddressLike,
     l2GatewayDomain: bigint | number,
-    portal: EthAddressLike,
+    forwarder: EthAddressLike,
   ) {
     return new DeployMethod<AztecGateway7683Contract>(
       PublicKeys.default(),
@@ -82,7 +82,7 @@ export class AztecGateway7683Contract extends ContractBase {
     wallet: Wallet,
     l2Gateway: EthAddressLike,
     l2GatewayDomain: bigint | number,
-    portal: EthAddressLike,
+    forwarder: EthAddressLike,
   ) {
     return new DeployMethod<AztecGateway7683Contract>(
       publicKeys,
@@ -184,11 +184,11 @@ export class AztecGateway7683Contract extends ContractBase {
     ) => ContractFunctionInteraction) &
       Pick<ContractMethod, "selector">
 
-    /** constructor(l2Gateway: struct, l2GatewayDomain: integer, portal: struct) */
+    /** constructor(l2Gateway: struct, l2GatewayDomain: integer, forwarder: struct) */
     constructor: ((
       l2Gateway: EthAddressLike,
       l2GatewayDomain: bigint | number,
-      portal: EthAddressLike,
+      forwarder: EthAddressLike,
     ) => ContractFunctionInteraction) &
       Pick<ContractMethod, "selector">
 
