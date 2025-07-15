@@ -1,35 +1,47 @@
-import "dotenv/config"
 import { createLogger, SponsoredFeePaymentMethod } from "@aztec/aztec.js"
 import { TokenContract } from "@aztec/noir-contracts.js/Token"
 
 import { getSponsoredFPCAddress } from "./fpc.js"
 import { getPxe, getWalletFromSecretKey } from "./utils.js"
 
+const [
+  ,
+  ,
+  aztecSecretKey,
+  aztecSalt,
+  tokenName,
+  tokenSymbol,
+  tokenDecimals,
+  privateMintAmount,
+  publicMintAmount,
+  pxeUrl = "https://aztec-alpha-testnet-fullnode.zkv.xyz",
+] = process.argv
+
 const main = async () => {
   const logger = createLogger("deploy-token")
-  const pxe = await getPxe()
+  const pxe = await getPxe(pxeUrl)
   const paymentMethod = new SponsoredFeePaymentMethod(await getSponsoredFPCAddress())
   const wallet = await getWalletFromSecretKey({
-    secretKey: process.env.AZTEC_SECRET_KEY as string,
-    salt: process.env.AZTEC_KEY_SALT as string,
+    secretKey: aztecSecretKey,
+    salt: aztecSalt,
     pxe,
     deploy: false,
   })
 
-  const token = await TokenContract.deploy(wallet, wallet.getAddress(), "Wrapper Ethereum", "WETH", 18)
+  const token = await TokenContract.deploy(wallet, wallet.getAddress(), tokenName, tokenSymbol, parseInt(tokenDecimals))
     .send({
       fee: { paymentMethod },
     })
     .deployed()
 
   await token.methods
-    .mint_to_private(wallet.getAddress(), wallet.getAddress(), 1000000000000000000n)
+    .mint_to_private(wallet.getAddress(), wallet.getAddress(), BigInt(privateMintAmount))
     .send({
       fee: { paymentMethod },
     })
     .wait()
   await token.methods
-    .mint_to_public(wallet.getAddress(), 1000000000000000000n)
+    .mint_to_public(wallet.getAddress(), BigInt(publicMintAmount))
     .send({
       fee: { paymentMethod },
     })

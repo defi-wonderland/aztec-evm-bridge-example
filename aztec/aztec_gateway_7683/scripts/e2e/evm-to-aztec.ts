@@ -20,23 +20,30 @@ import { OrderData } from "../../src/ts/test/OrderData.js"
 import { parseFilledLog } from "../../src/ts/test/utils.js"
 import { SponsoredFPCContractArtifact } from "@aztec/noir-contracts.js/SponsoredFPC"
 
-const AZTEC_GATEWAY_7683 = process.env.AZTEC_GATEWAY_7683 as `0x${string}`
-const L2_GATEWAY_7683 = process.env.L2_GATEWAY_7683 as `0x${string}`
-const AZTEC_TOKEN = process.env.AZTEC_TOKEN as `0x${string}`
-const L2_EVM_TOKEN = process.env.L2_EVM_TOKEN as `0x${string}`
-const L2_GATEWAY_7683_DOMAIN = parseInt(process.env.L2_GATEWAY_7683_DOMAIN as string)
 const ORDER_DATA_TYPE = "0xf00c3bf60c73eb97097f1c9835537da014e0b755fe94b25d7ac8401df66716a0"
-const EVM_PK = process.env.EVM_PK as `0x${string}`
+
+const [
+  ,
+  ,
+  aztecSecretKey,
+  aztecSalt,
+  evmPk,
+  aztecGateway7683Address,
+  l2Gateway7683Address,
+  l2Gateway7683Domain,
+  aztecTokenAddress,
+  l2EvmTokenAddress,
+  recipientAddress,
+  pxeUrl = "https://aztec-alpha-testnet-fullnode.zkv.xyz",
+] = process.argv
 
 // NOTE: make sure that the filler is running
 async function main(): Promise<void> {
   const logger = createLogger("e2e:evm-to-aztec")
 
-  const l2EvmChain = Object.values(chains).find(
-    ({ id }: any) => id.toString() === (process.env.EVM_L2_CHAIN_ID as string),
-  ) as chains.Chain
+  const l2EvmChain = Object.values(chains).find(({ id }: any) => id.toString() === l2Gateway7683Domain) as chains.Chain
   const evmWalletClient = createWalletClient({
-    account: privateKeyToAccount(EVM_PK),
+    account: privateKeyToAccount(evmPk as `0x${string}`),
     chain: l2EvmChain,
     transport: http(),
   })
@@ -48,10 +55,10 @@ async function main(): Promise<void> {
   const amount = 100n
   logger.info("approving tokens ...")
   let txHash = await evmWalletClient.writeContract({
-    address: L2_EVM_TOKEN,
+    address: l2EvmTokenAddress as `0x${string}`,
     abi: erc20Abi,
     functionName: "approve",
-    args: [L2_GATEWAY_7683, amount],
+    args: [l2Gateway7683Address as `0x${string}`, amount],
   })
   await evmPublicClient.waitForTransactionReceipt({ hash: txHash })
 
@@ -60,16 +67,16 @@ async function main(): Promise<void> {
   const secretHash = await poseidon2Hash([secret])
   const nonce = Fr.random()
   const orderData = new OrderData({
-    sender: padHex(evmWalletClient.account.address),
+    sender: padHex(recipientAddress as `0x${string}`),
     recipient: secretHash.toString(),
-    inputToken: padHex(L2_EVM_TOKEN),
-    outputToken: AZTEC_TOKEN,
+    inputToken: padHex(l2EvmTokenAddress as `0x${string}`),
+    outputToken: aztecTokenAddress as `0x${string}`,
     amountIn: amount,
     amountOut: amount,
     senderNonce: nonce.toBigInt(),
-    originDomain: L2_GATEWAY_7683_DOMAIN,
+    originDomain: parseInt(l2Gateway7683Domain),
     destinationDomain: 999999,
-    destinationSettler: AZTEC_GATEWAY_7683,
+    destinationSettler: aztecGateway7683Address as `0x${string}`,
     fillDeadline,
     orderType: 1, // PRIVATE_ORDER
     data: padHex("0x00"),
@@ -79,7 +86,7 @@ async function main(): Promise<void> {
   // NOTE: make sure to approve the tokens
   logger.info(`creating open order on ${l2EvmChain.name} ...`)
   txHash = await evmWalletClient.writeContract({
-    address: L2_GATEWAY_7683,
+    address: l2Gateway7683Address as `0x${string}`,
     functionName: "open",
     abi: [
       {
@@ -125,19 +132,17 @@ async function main(): Promise<void> {
   logger.info(`order created. tx hash: ${txHash}`)
   logger.info("waiting for the filler to fill the order ...")
 
-  const aztecGateway7683Address = AztecAddress.fromString(AZTEC_GATEWAY_7683)
-
-  const pxe = await getPxe()
+  const pxe = await getPxe(pxeUrl)
   const paymentMethod = new SponsoredFeePaymentMethod(await getSponsoredFPCAddress())
   const aztecWalllet = await getWalletFromSecretKey({
-    secretKey: process.env.AZTEC_SECRET_KEY as string,
-    salt: process.env.AZTEC_KEY_SALT as string,
+    secretKey: aztecSecretKey,
+    salt: aztecSalt,
     pxe,
   })
 
-  const node = getNode()
+  const node = getNode(pxeUrl)
   await pxe.registerContract({
-    instance: (await node.getContract(aztecGateway7683Address)) as ContractInstanceWithAddress,
+    instance: (await node.getContract(AztecAddress.fromString(aztecGateway7683Address))) as ContractInstanceWithAddress,
     artifact: AztecGateway7683ContractArtifact,
   })
   await pxe.registerContract({
@@ -145,7 +150,11 @@ async function main(): Promise<void> {
     artifact: SponsoredFPCContractArtifact,
   })
 
-  const gateway = await Contract.at(aztecGateway7683Address, AztecGateway7683ContractArtifact, aztecWalllet)
+  const gateway = await Contract.at(
+    AztecAddress.fromString(aztecGateway7683Address),
+    AztecGateway7683ContractArtifact,
+    aztecWalllet,
+  )
 
   while (true) {
     const status = await gateway.methods.get_order_status(orderId).simulate()
@@ -161,7 +170,7 @@ async function main(): Promise<void> {
           // TODO: understand why if i use fromBlock and toBlock i always receive the penultimante log.
           // Basically i never receive the last one even if block numbers are up to date
           const { logs } = await pxe.getPublicLogs({
-            contractAddress: aztecGateway7683Address,
+            contractAddress: AztecAddress.fromString(aztecGateway7683Address),
           })
 
           const parsedLogs = logs.map(({ log }) => parseFilledLog(log.fields))

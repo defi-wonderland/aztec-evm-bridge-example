@@ -9,30 +9,37 @@ import { OrderData } from "../src/ts/test/OrderData.js"
 import { TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
 import { poseidon2Hash } from "@aztec/foundation/crypto"
 
-const AZTEC_GATEWAY_7683 = process.env.AZTEC_GATEWAY_7683 as `0x${string}`
-const AZTEC_TOKEN = process.env.AZTEC_TOKEN as `0x${string}`
-const L2_EVM_TOKEN = process.env.L2_EVM_TOKEN as `0x${string}`
-const L2_GATEWAY_7683_DOMAIN = parseInt(process.env.L2_GATEWAY_7683_DOMAIN as string)
-const EVM_WALLET = process.env.L2_EVM_TOKEN as `0x${string}`
+const [
+  ,
+  ,
+  aztecSecretKey,
+  aztecSalt,
+  aztecGateway7683Address,
+  aztecTokenAddress,
+  l2EvmTokenAddress,
+  l2Gateway7683Domain,
+  fillerAddress,
+  pxeUrl = "https://aztec-alpha-testnet-fullnode.zkv.xyz",
+] = process.argv
 
 async function main(): Promise<void> {
   const logger = createLogger("fill-private")
-  const pxe = await getPxe()
+  const pxe = await getPxe(pxeUrl)
   const paymentMethod = new SponsoredFeePaymentMethod(await getSponsoredFPCAddress())
   const wallet = await getWalletFromSecretKey({
-    secretKey: process.env.AZTEC_SECRET_KEY as string,
-    salt: process.env.AZTEC_KEY_SALT as string,
+    secretKey: aztecSecretKey,
+    salt: aztecSalt,
     pxe,
   })
 
-  await wallet.registerSender(AztecAddress.fromString(AZTEC_GATEWAY_7683))
+  await wallet.registerSender(AztecAddress.fromString(aztecGateway7683Address))
 
   const gateway = await Contract.at(
-    AztecAddress.fromString(AZTEC_GATEWAY_7683),
+    AztecAddress.fromString(aztecGateway7683Address),
     AztecGateway7683ContractArtifact,
     wallet,
   )
-  const token = await Contract.at(AztecAddress.fromString(AZTEC_TOKEN), TokenContractArtifact, wallet)
+  const token = await Contract.at(AztecAddress.fromString(aztecTokenAddress), TokenContractArtifact, wallet)
 
   const amountOut = 100n
   const nonce = Fr.random()
@@ -42,12 +49,12 @@ async function main(): Promise<void> {
   const orderData = new OrderData({
     sender: "0x0000000000000000000000000000000000000000000000000000000000000000",
     recipient: secretHash.toString(),
-    inputToken: padHex(L2_EVM_TOKEN),
-    outputToken: AZTEC_TOKEN,
+    inputToken: padHex(l2EvmTokenAddress as `0x${string}`),
+    outputToken: aztecTokenAddress as `0x${string}`,
     amountIn: amountOut,
     amountOut,
     senderNonce: nonce.toBigInt(),
-    originDomain: L2_GATEWAY_7683_DOMAIN,
+    originDomain: parseInt(l2Gateway7683Domain),
     destinationDomain: 999999, // AZTEC_7683_DOMAIN
     destinationSettler: gateway.address.toString(),
     fillDeadline: 2 ** 32 - 1,
@@ -66,7 +73,7 @@ async function main(): Promise<void> {
     .fill_private(
       Array.from(hexToBytes(orderId.toString())),
       Array.from(hexToBytes(orderData.encode())),
-      Array.from(hexToBytes(padHex(EVM_WALLET))),
+      Array.from(hexToBytes(padHex(fillerAddress as `0x${string}`))),
     )
     .with({
       authWitnesses: [witness],

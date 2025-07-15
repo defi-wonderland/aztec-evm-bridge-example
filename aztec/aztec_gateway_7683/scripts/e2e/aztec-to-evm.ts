@@ -9,7 +9,6 @@ import {
   SponsoredFeePaymentMethod,
 } from "@aztec/aztec.js"
 import { createPublicClient, hexToBytes, http, padHex } from "viem"
-import { privateKeyToAccount } from "viem/accounts"
 import * as chains from "viem/chains"
 import { TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
 import { SponsoredFPCContractArtifact } from "@aztec/noir-contracts.js/SponsoredFPC"
@@ -19,45 +18,48 @@ import { getNode, getPxe, getWalletFromSecretKey } from "../utils.js"
 import { AztecGateway7683ContractArtifact } from "../../src/artifacts/AztecGateway7683.js"
 import { OrderData } from "../../src/ts/test/OrderData.js"
 
-const AZTEC_GATEWAY_7683 = process.env.AZTEC_GATEWAY_7683 as `0x${string}`
-const L2_GATEWAY_7683 = process.env.L2_GATEWAY_7683 as `0x${string}`
-const AZTEC_TOKEN = process.env.AZTEC_TOKEN as `0x${string}`
-const L2_EVM_TOKEN = process.env.L2_EVM_TOKEN as `0x${string}`
-const L2_GATEWAY_7683_DOMAIN = parseInt(process.env.L2_GATEWAY_7683_DOMAIN as string)
 const ORDER_DATA_TYPE = "0xf00c3bf60c73eb97097f1c9835537da014e0b755fe94b25d7ac8401df66716a0"
-const EVM_PK = process.env.EVM_PK as `0x${string}`
+
+const [
+  ,
+  ,
+  aztecSecretKey,
+  aztecSalt,
+  aztecGateway7683Address,
+  l2Gateway7683Address,
+  l2Gateway7683Domain,
+  aztecTokenAddress,
+  l2EvmTokenAddress,
+  recipientAddress,
+  pxeUrl = "https://aztec-alpha-testnet-fullnode.zkv.xyz",
+] = process.argv
 
 // NOTE: make sure that the filler is running
 async function main(): Promise<void> {
   const logger = createLogger("e2e:evm-to-aztec")
 
-  const l2EvmChain = Object.values(chains).find(
-    ({ id }: any) => id.toString() === (process.env.EVM_L2_CHAIN_ID as string),
-  ) as chains.Chain
+  const l2EvmChain = Object.values(chains).find(({ id }: any) => id.toString() === l2Gateway7683Domain) as chains.Chain
   const evmClient = createPublicClient({
     chain: l2EvmChain,
     transport: http(),
   })
 
-  const pxe = await getPxe()
+  const pxe = await getPxe(pxeUrl)
   const paymentMethod = new SponsoredFeePaymentMethod(await getSponsoredFPCAddress())
   const aztecWallet = await getWalletFromSecretKey({
-    secretKey: process.env.AZTEC_SECRET_KEY as string,
-    salt: process.env.AZTEC_KEY_SALT as string,
+    secretKey: aztecSecretKey,
+    salt: aztecSalt,
     pxe,
     deploy: false,
   })
 
-  const aztecGateway7683Address = AztecAddress.fromString(AZTEC_GATEWAY_7683)
-  const aztecTokenAddress = AztecAddress.fromString(AZTEC_TOKEN)
-
-  const node = getNode()
+  const node = getNode(pxeUrl)
   await pxe.registerContract({
-    instance: (await node.getContract(aztecGateway7683Address)) as ContractInstanceWithAddress,
+    instance: (await node.getContract(AztecAddress.fromString(aztecGateway7683Address))) as ContractInstanceWithAddress,
     artifact: AztecGateway7683ContractArtifact,
   })
   await pxe.registerContract({
-    instance: (await node.getContract(aztecTokenAddress)) as ContractInstanceWithAddress,
+    instance: (await node.getContract(AztecAddress.fromString(aztecTokenAddress))) as ContractInstanceWithAddress,
     artifact: TokenContractArtifact,
   })
   await pxe.registerContract({
@@ -65,23 +67,27 @@ async function main(): Promise<void> {
     artifact: SponsoredFPCContractArtifact,
   })
 
-  const gateway = await Contract.at(aztecGateway7683Address, AztecGateway7683ContractArtifact, aztecWallet)
-  const token = await Contract.at(aztecTokenAddress, TokenContractArtifact, aztecWallet)
+  const gateway = await Contract.at(
+    AztecAddress.fromString(aztecGateway7683Address),
+    AztecGateway7683ContractArtifact,
+    aztecWallet,
+  )
+  const token = await Contract.at(AztecAddress.fromString(aztecTokenAddress), TokenContractArtifact, aztecWallet)
 
   const fillDeadline = 2 ** 32 - 1
   const amount = 100n
   const nonce = Fr.random()
   const orderData = new OrderData({
     sender: padHex("0x00"),
-    recipient: padHex(privateKeyToAccount(EVM_PK).address),
-    inputToken: AZTEC_TOKEN,
-    outputToken: padHex(L2_EVM_TOKEN),
+    recipient: padHex(recipientAddress as `0x${string}`),
+    inputToken: aztecTokenAddress as `0x${string}`,
+    outputToken: padHex(l2EvmTokenAddress as `0x${string}`),
     amountIn: amount,
     amountOut: amount,
     senderNonce: nonce.toBigInt(),
     originDomain: 999999,
-    destinationDomain: L2_GATEWAY_7683_DOMAIN,
-    destinationSettler: AZTEC_GATEWAY_7683,
+    destinationDomain: parseInt(l2Gateway7683Domain),
+    destinationSettler: aztecGateway7683Address as `0x${string}`,
     fillDeadline,
     orderType: 1, // PRIVATE_ORDER
     data: padHex("0x00"),
@@ -110,7 +116,7 @@ async function main(): Promise<void> {
 
   while (true) {
     const orderStatus = await evmClient.readContract({
-      address: L2_GATEWAY_7683,
+      address: l2Gateway7683Address as `0x${string}`,
       abi: [
         {
           type: "function",

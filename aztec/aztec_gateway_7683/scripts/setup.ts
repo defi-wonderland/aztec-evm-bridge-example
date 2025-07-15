@@ -10,6 +10,9 @@ const PORTAL_ADDRESS = EthAddress.ZERO
 const L2_CHAIN_ID = 11155420
 const DESTINATION_SETTLER_EVM_L2 = EthAddress.ZERO
 
+/**
+ * This is used solely for testing purposes, to test the multi-PXE environment.
+ */
 async function main(): Promise<void> {
   const logger = createLogger("setup")
   const pxes = await getPXEs(["pxe1", "pxe2", "pxe3"])

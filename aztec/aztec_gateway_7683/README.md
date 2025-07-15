@@ -49,8 +49,6 @@ cp ~/nargo/github.com/AztecProtocol/aztec-packages/v0.87.9/noir-projects/noir-co
 
 ## 🧪 Interacting with the Bridge
 
-Before interacting with the bridge, ensure you have created a `.env` file based on the structure provided in `.env.example`. You can get the addresses [HERE](https://substance-labs.gitbook.io/aztec-evm-bridge/deployments). Then:
-
 ```bash
 aztec-nargo compile
 aztec codegen target --outdir src/artifacts
@@ -61,7 +59,16 @@ aztec codegen target --outdir src/artifacts
 To test the bridge flow **from Aztec Testnet to Base Sepolia**, run:
 
 ```bash
-node --no-warnings --loader ts-node/esm scripts/e2e/aztec-to-evm.ts 
+node --no-warnings --loader ts-node/esm scripts/e2e/aztec-to-evm.ts \
+  0xYOUR_AZTEC_SECRET_KEY \
+  0xYOUR_AZTEC_SALT \
+  0xAZTEC_GATEWAY_7683_ADDRESS \
+  0xL2_GATEWAY_7683_ADDRESS \
+  L2_GATEWAY_7683_DOMAIN \
+  0xAZTEC_TOKEN_ADDRESS \
+  0xL2_EVM_TOKEN_ADDRESS \
+  0xRECIPIENT_ADDRESS \
+  https://aztec-alpha-testnet-fullnode.zkv.xyz
 ```
 
 ### ⬅️ Base Sepolia → Aztec Testnet
@@ -69,8 +76,20 @@ node --no-warnings --loader ts-node/esm scripts/e2e/aztec-to-evm.ts
 To test the bridge flow **from Base Sepolia to Aztec Testnet**, run:
 
 ```bash
-node --no-warnings --loader ts-node/esm scripts/e2e/evm-to-aztec.ts 
+node --no-warnings --loader ts-node/esm scripts/e2e/evm-to-aztec.ts \
+  0xYOUR_AZTEC_SECRET_KEY \
+  0xYOUR_AZTEC_SALT \
+  0xYOUR_EVM_PRIVATE_KEY \
+  0xAZTEC_GATEWAY_7683_ADDRESS \
+  0xL2_GATEWAY_7683_ADDRESS \
+  L2_GATEWAY_7683_DOMAIN \
+  0xAZTEC_TOKEN_ADDRESS \
+  0xL2_EVM_TOKEN_ADDRESS \
+  0xRECIPIENT_ADDRESS \
+  https://aztec-alpha-testnet-fullnode.zkv.xyz
 ```
+
+You can get the addresses [HERE](https://substance-labs.gitbook.io/aztec-evm-bridge/deployments). Then:
 
 ### ⚠️ Important Notes
 

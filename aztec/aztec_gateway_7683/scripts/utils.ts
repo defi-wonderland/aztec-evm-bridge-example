@@ -7,7 +7,7 @@ import { getSponsoredFPCInstance } from "./fpc.js"
 import { SponsoredFPCContractArtifact } from "@aztec/noir-contracts.js/SponsoredFPC"
 
 export const getPXEs = async (names: string[]): Promise<PXE[]> => {
-  const url = process.env.PXE_URL ?? "http://localhost:8080"
+  const url = "http://localhost:8080"
   const node = createAztecNodeClient(url)
 
   const fullConfig = {
@@ -32,11 +32,10 @@ export const getPXEs = async (names: string[]): Promise<PXE[]> => {
   return pxes
 }
 
-export const getNode = () =>
-  createAztecNodeClient(process.env.PXE_URL ?? "https://aztec-alpha-testnet-fullnode.zkv.xyz")
+export const getNode = (pxeUrl: string) => createAztecNodeClient(pxeUrl)
 
-export const getPxe = async () => {
-  const node = getNode()
+export const getPxe = async (pxeUrl: string) => {
+  const node = getNode(pxeUrl)
   const fullConfig = {
     ...getPXEServiceConfig(),
     l1Contracts: await node.getL1ContractAddresses(),

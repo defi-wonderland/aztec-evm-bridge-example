@@ -8,32 +8,40 @@ import { AztecGateway7683ContractArtifact } from "../src/artifacts/AztecGateway7
 import { OrderData } from "../src/ts/test/OrderData.js"
 import { TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
 
-const AZTEC_GATEWAY_7683 = process.env.AZTEC_GATEWAY_7683 as `0x${string}`
-const L2_GATEWAY_7683 = process.env.L2_GATEWAY_7683 as `0x${string}`
-const RECIPIENT = process.env.RECIPIENT as `0x${string}`
-const AZTEC_TOKEN = process.env.AZTEC_TOKEN as `0x${string}`
-const L2_EVM_TOKEN = process.env.L2_EVM_TOKEN as `0x${string}`
-const L2_GATEWAY_7683_DOMAIN = parseInt(process.env.L2_GATEWAY_7683_DOMAIN as string)
 const ORDER_DATA_TYPE = "0xf00c3bf60c73eb97097f1c9835537da014e0b755fe94b25d7ac8401df66716a0"
+
+const [
+  ,
+  ,
+  aztecSecretKey,
+  aztecSalt,
+  aztecGateway7683Address,
+  l2Gateway7683Address,
+  l2Gateway7683Domain,
+  aztecTokenAddress,
+  l2EvmTokenAddress,
+  recipientAddress,
+  pxeUrl = "https://aztec-alpha-testnet-fullnode.zkv.xyz",
+] = process.argv
 
 async function main(): Promise<void> {
   const logger = createLogger("open-private")
-  const pxe = await getPxe()
+  const pxe = await getPxe(pxeUrl)
   const paymentMethod = new SponsoredFeePaymentMethod(await getSponsoredFPCAddress())
   const wallet = await getWalletFromSecretKey({
-    secretKey: process.env.AZTEC_SECRET_KEY as string,
-    salt: process.env.AZTEC_KEY_SALT as string,
+    secretKey: aztecSecretKey,
+    salt: aztecSalt,
     pxe,
   })
 
-  await wallet.registerSender(AztecAddress.fromString(AZTEC_GATEWAY_7683))
+  await wallet.registerSender(AztecAddress.fromString(aztecGateway7683Address))
 
   const gateway = await Contract.at(
-    AztecAddress.fromString(AZTEC_GATEWAY_7683),
+    AztecAddress.fromString(aztecGateway7683Address),
     AztecGateway7683ContractArtifact,
     wallet,
   )
-  const token = await Contract.at(AztecAddress.fromString(AZTEC_TOKEN), TokenContractArtifact, wallet)
+  const token = await Contract.at(AztecAddress.fromString(aztecTokenAddress), TokenContractArtifact, wallet)
 
   const amountIn = 100n
   const nonce = Fr.random()
@@ -44,15 +52,15 @@ async function main(): Promise<void> {
 
   const orderData = new OrderData({
     sender: "0x0000000000000000000000000000000000000000000000000000000000000000",
-    recipient: padHex(RECIPIENT),
-    inputToken: AZTEC_TOKEN,
-    outputToken: padHex(L2_EVM_TOKEN),
+    recipient: padHex(recipientAddress as `0x${string}`),
+    inputToken: aztecTokenAddress as `0x${string}`,
+    outputToken: padHex(l2EvmTokenAddress as `0x${string}`),
     amountIn,
     amountOut: amountIn,
     senderNonce: nonce.toBigInt(),
     originDomain: 999999, // AZTEC_7683_DOMAIN
-    destinationDomain: L2_GATEWAY_7683_DOMAIN,
-    destinationSettler: padHex(L2_GATEWAY_7683),
+    destinationDomain: parseInt(l2Gateway7683Domain),
+    destinationSettler: padHex(l2Gateway7683Address as `0x${string}`),
     fillDeadline: 2 ** 32 - 1,
     orderType: 1, // PRIVATE_ORDER
     data: padHex("0x00"),
