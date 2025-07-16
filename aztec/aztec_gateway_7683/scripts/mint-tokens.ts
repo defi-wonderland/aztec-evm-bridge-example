@@ -1,8 +1,8 @@
 import { AztecAddress, createLogger, SponsoredFeePaymentMethod } from "@aztec/aztec.js"
-import { TokenContract } from "@aztec/noir-contracts.js/Token"
+import { TokenContract, TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
 
 import { getSponsoredFPCAddress } from "./fpc.js"
-import { getPxe, getWalletFromSecretKey } from "./utils.js"
+import { getNode, getPxe, getWalletFromSecretKey } from "./utils.js"
 
 const [
   ,
@@ -27,6 +27,12 @@ const main = async () => {
     deploy: false,
   })
 
+  const contractInstance = await getNode(pxeUrl).getContract(AztecAddress.fromString(tokenAddress))
+  await pxe.registerContract({
+    instance: contractInstance!,
+    artifact: TokenContractArtifact,
+  })
+
   const token = await TokenContract.at(AztecAddress.fromString(tokenAddress as string), wallet)
 
   await token.methods
@@ -41,11 +47,6 @@ const main = async () => {
       fee: { paymentMethod },
     })
     .wait()
-
-  await pxe.registerContract({
-    instance: token.instance,
-    artifact: TokenContract.artifact,
-  })
 
   logger.info(`tokens succesfully minted`)
 }
