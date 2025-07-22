@@ -1,9 +1,9 @@
 use dep::aztec::{prelude::{AztecAddress, EthAddress}, protocol_types::traits::FromField};
 
 pub(crate) fn u8_32_to_u128(input: [u8; 32]) -> u128 {
-    let mut result = 0;
+    let mut result = 0u128;
     for i in 0..16 {
-        result = result + (input[31 - i] as u128) * (1 << (i * 8));
+        result += (input[31 - i] as u128) << ((i * 8) as u8);
     }
     result
 }

@@ -76,7 +76,9 @@ async function main(): Promise<void> {
       authWitnesses: [witness],
     })
     .send({ fee: { paymentMethod } })
-    .wait()
+    .wait({
+      timeout: 120000,
+    })
 
   logger.info(`private order opened: ${receipt.txHash.toString()}`)
 }

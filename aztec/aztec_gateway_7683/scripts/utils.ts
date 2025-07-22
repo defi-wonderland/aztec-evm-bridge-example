@@ -41,7 +41,6 @@ export const getPxe = async (pxeUrl: string) => {
     l1Contracts: await node.getL1ContractAddresses(),
     proverEnabled: true,
   }
-
   const store = await createStore(process.env.PXE_STORE_NAME ?? "pxe-testnet", {
     dataDirectory: "store",
     dataStoreMapSizeKB: 1e6,

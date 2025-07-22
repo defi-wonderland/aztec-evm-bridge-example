@@ -19,6 +19,7 @@ import { AztecGateway7683ContractArtifact } from "../../src/artifacts/AztecGatew
 import { OrderData } from "../../src/ts/test/OrderData.js"
 import { parseFilledLog } from "../../src/ts/test/utils.js"
 import { SponsoredFPCContractArtifact } from "@aztec/noir-contracts.js/SponsoredFPC"
+import { waitForTransactionReceipt } from "viem/actions"
 
 const ORDER_DATA_TYPE = "0xf00c3bf60c73eb97097f1c9835537da014e0b755fe94b25d7ac8401df66716a0"
 
@@ -128,6 +129,7 @@ async function main(): Promise<void> {
       },
     ],
   })
+  const receipt = await waitForTransactionReceipt(evmPublicClient, { hash: txHash })
 
   logger.info(`order created. tx hash: ${txHash}`)
   logger.info("waiting for the filler to fill the order ...")
@@ -195,7 +197,9 @@ async function main(): Promise<void> {
             paymentMethod,
           },
         })
-        .wait()
+        .wait({
+          timeout: 120000,
+        })
       break
     }
 

@@ -110,7 +110,9 @@ async function main(): Promise<void> {
       ],
     })
     .send({ fee: { paymentMethod } })
-    .wait()
+    .wait({
+      timeout: 120000,
+    })
 
   logger.info(`order opened: ${receipt.txHash.toString()}`)
 

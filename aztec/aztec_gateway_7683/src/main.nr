@@ -573,7 +573,7 @@ pub contract AztecGateway7683 {
     #[public]
     #[internal]
     fn _trigger_settlement(order_id: Field, content_hash: Field) {
-        storage.orders_settlement_block_numbers.at(order_id).write(context.block_number());
+        storage.orders_settlement_block_numbers.at(order_id).write(context.block_number() as Field);
         context.message_portal(storage.config.read().forwarder, content_hash);
     }
 

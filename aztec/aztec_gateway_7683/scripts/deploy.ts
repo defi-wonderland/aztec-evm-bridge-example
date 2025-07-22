@@ -36,7 +36,9 @@ const main = async () => {
     .send({
       fee: { paymentMethod },
     })
-    .deployed()
+    .deployed({
+      timeout: 120000,
+    })
 
   await pxe.registerContract({
     instance: gateway.instance,

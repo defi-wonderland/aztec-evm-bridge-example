@@ -19,6 +19,7 @@ const [
 const main = async () => {
   const logger = createLogger("deploy-token")
   const pxe = await getPxe(pxeUrl)
+
   const paymentMethod = new SponsoredFeePaymentMethod(await getSponsoredFPCAddress())
   const wallet = await getWalletFromSecretKey({
     secretKey: aztecSecretKey as string,
@@ -40,13 +41,15 @@ const main = async () => {
     .send({
       fee: { paymentMethod },
     })
-    .wait()
-  await token.methods
+    .wait({
+      timeout: 120000,
+    })
+  /*await token.methods
     .mint_to_public(AztecAddress.fromString(recipientAddress), BigInt(amountPublic))
     .send({
       fee: { paymentMethod },
     })
-    .wait()
+    .wait()*/
 
   logger.info(`tokens succesfully minted`)
 }

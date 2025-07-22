@@ -12,8 +12,6 @@ const [
   tokenName,
   tokenSymbol,
   tokenDecimals,
-  privateMintAmount,
-  publicMintAmount,
   pxeUrl = "https://aztec-alpha-testnet-fullnode.zkv.xyz",
 ] = process.argv
 
@@ -32,20 +30,9 @@ const main = async () => {
     .send({
       fee: { paymentMethod },
     })
-    .deployed()
-
-  await token.methods
-    .mint_to_private(wallet.getAddress(), wallet.getAddress(), BigInt(privateMintAmount))
-    .send({
-      fee: { paymentMethod },
+    .deployed({
+      timeout: 120000,
     })
-    .wait()
-  await token.methods
-    .mint_to_public(wallet.getAddress(), BigInt(publicMintAmount))
-    .send({
-      fee: { paymentMethod },
-    })
-    .wait()
 
   await pxe.registerContract({
     instance: token.instance,
