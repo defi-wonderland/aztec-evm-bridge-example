@@ -28,6 +28,7 @@ const main = async () => {
   await mongoClient.connect()
   const db = mongoClient.db((process.env.MONGO_DB_NAME as string) || "filler")
 
+  // TODO: add possibility to register senders
   await initPxe()
 
   const aztecWallet = await getAztecWallet()

@@ -78,7 +78,7 @@ export const getPxe = () => {
 }
 
 export const getAztecNode = async (): Promise<AztecNode> => {
-  return await createAztecNodeClient(process.env.PXE_URL || "http://localhost:8080")
+  return await createAztecNodeClient(process.env.AZTEC_RPC_URL || "http://localhost:8080")
 }
 
 export const getPaymentMethod = async (): Promise<SponsoredFeePaymentMethod> =>
