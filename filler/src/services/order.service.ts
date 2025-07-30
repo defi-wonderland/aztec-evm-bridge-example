@@ -21,6 +21,7 @@ import type { Chain, Log } from "viem"
 import type { AccountWalletWithSecretKey } from "@aztec/aztec.js"
 import type { BaseServiceOpts } from "./base.service.js"
 import type MultiClient from "../MultiClient.js"
+import type { ResolvedOrder } from "../types.js"
 
 export type OrderServiceOpts = BaseServiceOpts & {
   aztecWallet: AccountWalletWithSecretKey
@@ -100,13 +101,10 @@ class OrderService extends BaseService {
     }
   }
 
-  async fillAztecOrderFromLog(log: any): Promise<void> {
+  async fillAztecOrderFromLog(log: ResolvedOrder): Promise<void> {
     const release = await this.fillAztecOrderFromLogMutex.acquire()
     try {
-      const {
-        orderId,
-        resolvedOrder: { fillInstructions, maxSpent, minReceived },
-      } = log as any
+      const { orderId, fillInstructions, maxSpent, minReceived } = log
 
       this.logger.info(`new order detected on Aztec. order id: ${orderId}. processing it ...`)
       if (await this.db.collection("orders").findOne({ orderId })) {
@@ -126,15 +124,23 @@ class OrderService extends BaseService {
         return
       }
 
-      const originData = fillInstructions[0].originData
-      const minReceivedAmount = minReceived[0].amount
-      const minReceivedToken = minReceived[0].token
-      // const minReceivedRecipient = minReceived[0].recipient
-      // const minReceivedChainId = minReceived[0].chainId
-      const maxSpentAmount = maxSpent[0].amount
-      const maxSpentToken = sliceHex(maxSpent[0].token, 12)
-      const maxSpentRecipient = maxSpent[0].recipient
-      const maxSpentChainId = maxSpent[0].chainId
+      if (!fillInstructions?.length) throw new Error("Invalid fill instructions")
+      if (!minReceived?.length) throw new Error("Invalid min received")
+      if (!maxSpent?.length) throw new Error("Invalid max spent")
+      const { originData } = fillInstructions[0] ?? {}
+      const {
+        amount: minReceivedAmount,
+        token: minReceivedToken,
+        // recipient: minReceivedRecipient,
+        // chainId: minReceivedChainId
+      } = minReceived[0] ?? {}
+      const {
+        amount: maxSpentAmount,
+        token: rawMaxSpentToken,
+        recipient: maxSpentRecipient,
+        chainId: maxSpentChainId,
+      } = maxSpent[0] ?? {}
+      const maxSpentToken = rawMaxSpentToken ? sliceHex(rawMaxSpentToken, 12) : ""
 
       // TODO: check if minReceivedToken is supported
       if (maxSpentChainId !== this.l2EvmChain.id) throw new Error("Invalid chain id")
@@ -153,8 +159,8 @@ class OrderService extends BaseService {
       let txHash = await l2EvmClient.writeContract({
         abi: erc20Abi,
         //account: l2EvmClient.account.address,
-        address: maxSpentToken,
-        args: [this.l2EvmGatewayAddress, maxSpentAmount],
+        address: maxSpentToken! as `0x${string}`,
+        args: [this.l2EvmGatewayAddress, maxSpentAmount!],
         chain: this.l2EvmChain,
         functionName: "approve",
       })
@@ -266,7 +272,9 @@ class OrderService extends BaseService {
           .send({
             fee: { paymentMethod },
           })
-          .wait()
+          .wait({
+            timeout: 120000,
+          })
       } else {
         this.logger.info(`setting public authwit to fill the order ${orderId} ...`)
         // @ts-ignore

@@ -4,6 +4,7 @@ import { AztecAddress } from "@aztec/aztec.js"
 import { parseOpenLog, parseResolvedCrossChainOrder } from "../utils/aztec"
 
 import type { PXE } from "@aztec/aztec.js"
+import type { ResolvedOrder } from "../types"
 
 interface WatcherConfigs {
   service: string
@@ -12,7 +13,7 @@ interface WatcherConfigs {
   contractAddress: `0x${string}`
   eventName: string
   watchIntervalTimeMs: number
-  onLogs: (logs: any[]) => Promise<void>
+  onLogs: (logs: ResolvedOrder[]) => Promise<void>
 }
 
 class AztecWatcher {
@@ -91,10 +92,7 @@ class AztecWatcher {
         .map((orderId) => {
           const [open1, open2] = groupedLogs[orderId]
           const open = parseOpenLog(open1.log.fields, open2.log.fields)
-          return {
-            orderId: open.orderId,
-            resolvedOrder: parseResolvedCrossChainOrder(open.resolvedOrder),
-          }
+          return parseResolvedCrossChainOrder(open.resolvedOrder)
         })
 
       if (logs.length) {
