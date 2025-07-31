@@ -250,16 +250,16 @@ class OrderService extends BaseService {
 
       let receipt
       const paymentMethod = await getPaymentMethod()
+      const nonce = Fr.fromHexString(`0x${originData.slice(386, 450)}`)
       if (nextOrderStatus === ORDER_STATUS_FILLED_PRIVATELY) {
         this.logger.info(`creating authwit to fill the order ${orderId} ...`)
-        const nonce = `0x${originData.slice(386, 450)}`
         const witness = await this.aztecWallet.createAuthWit({
           caller: AztecAddress.fromString(this.aztecGatewayAddress),
           action: token.methods.transfer_to_public(
             this.aztecWallet.getAddress(),
             AztecAddress.fromString(this.aztecGatewayAddress),
             maxSpentAmount,
-            Fr.fromHexString(nonce),
+            nonce,
           ),
         })
         this.logger.info(`filling the private order ${orderId} ...`)
@@ -284,7 +284,7 @@ class OrderService extends BaseService {
               this.aztecWallet.getAddress(),
               AztecAddress.fromString(this.aztecGatewayAddress),
               maxSpentAmount,
-              0,
+              nonce,
             ),
           },
           true,
