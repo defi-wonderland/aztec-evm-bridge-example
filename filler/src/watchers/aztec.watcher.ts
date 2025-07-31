@@ -96,7 +96,7 @@ class AztecWatcher {
         })
 
       if (logs.length) {
-        this.logger.info(`Detected ${joinedLogs.length} new ${this.eventName} events Aztec. Processing them ...`)
+        this.logger.info(`Detected ${joinedLogs.length} new ${this.eventName} events on Aztec. Processing them ...`)
         await this.onLogs(joinedLogs)
       }
     } catch (error) {
