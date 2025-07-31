@@ -276,13 +276,14 @@ class OrderService extends BaseService {
           })
       } else {
         this.logger.info(`setting public authwit to fill the order ${orderId} ...`)
+        const recipient = `0x${originData.slice(66, 66 + 64)}`
         // @ts-ignore
         const res = await this.aztecWallet.setPublicAuthWit(
           {
             caller: AztecAddress.fromString(this.aztecGatewayAddress),
             action: token.methods.transfer_in_public(
               this.aztecWallet.getAddress(),
-              AztecAddress.fromString(this.aztecGatewayAddress),
+              AztecAddress.fromString(recipient),
               maxSpentAmount,
               nonce,
             ),
