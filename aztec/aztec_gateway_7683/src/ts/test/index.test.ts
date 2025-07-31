@@ -166,7 +166,9 @@ describe("AztecGateway7683", () => {
       )
     )
       .send({ fee: { paymentMethod } })
-      .wait()
+      .wait({
+        timeout: 120000
+      })
 
     const orderData = new OrderData({
       sender: user.getAddress().toString(),

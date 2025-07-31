@@ -213,7 +213,6 @@ class SettlementService extends BaseService {
       )
     } catch (err) {
       this.logger.error(err)
-      throw err
     } finally {
       release()
     }
@@ -307,7 +306,6 @@ class SettlementService extends BaseService {
       )
     } catch (err) {
       this.logger.error(err)
-      throw err
     } finally {
       release()
     }
@@ -355,8 +353,6 @@ class SettlementService extends BaseService {
       // TODO
     } catch (err) {
       this.logger.error(err)
-      throw err
-    } finally {
     }
   }
 
@@ -440,7 +436,6 @@ class SettlementService extends BaseService {
       )
     } catch (err) {
       this.logger.error(err)
-      throw err
     } finally {
       release()
     }

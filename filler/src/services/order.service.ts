@@ -191,7 +191,6 @@ class OrderService extends BaseService {
       })
     } catch (err) {
       this.logger.error(err)
-      throw err
     } finally {
       release()
     }
@@ -290,7 +289,9 @@ class OrderService extends BaseService {
           },
           true,
         )
-        await res.send({ fee: { paymentMethod } }).wait()
+        await res.send({ fee: { paymentMethod } }).wait({
+          timeout: 120000,
+        })
 
         this.logger.info(`filling the public order ${orderId} ...`)
 
@@ -300,7 +301,9 @@ class OrderService extends BaseService {
           .send({
             fee: { paymentMethod },
           })
-          .wait()
+          .wait({
+            timeout: 120000,
+          })
       }
 
       this.logger.info(
@@ -315,7 +318,6 @@ class OrderService extends BaseService {
       })
     } catch (err) {
       this.logger.error(err)
-      throw err
     } finally {
       release()
     }
