@@ -12,12 +12,12 @@ const [
   tokenName,
   tokenSymbol,
   tokenDecimals,
-  pxeUrl = "https://aztec-alpha-testnet-fullnode.zkv.xyz",
+  rpcUrl = "https://aztec-alpha-testnet-fullnode.zkv.xyz",
 ] = process.argv
 
 const main = async () => {
   const logger = createLogger("deploy-token")
-  const pxe = await getPxe(pxeUrl)
+  const pxe = await getPxe(rpcUrl)
   const paymentMethod = new SponsoredFeePaymentMethod(await getSponsoredFPCAddress())
   const wallet = await getWalletFromSecretKey({
     secretKey: aztecSecretKey,

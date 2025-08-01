@@ -31,7 +31,7 @@ const [
   aztecTokenAddress,
   l2EvmTokenAddress,
   recipientAddress,
-  pxeUrl = "https://aztec-alpha-testnet-fullnode.zkv.xyz",
+  rpcUrl = "https://aztec-alpha-testnet-fullnode.zkv.xyz",
 ] = process.argv
 
 // NOTE: make sure that the filler is running
@@ -44,7 +44,7 @@ async function main(): Promise<void> {
     transport: http(),
   })
 
-  const pxe = await getPxe(pxeUrl)
+  const pxe = await getPxe(rpcUrl)
   const paymentMethod = new SponsoredFeePaymentMethod(await getSponsoredFPCAddress())
   const aztecWallet = await getWalletFromSecretKey({
     secretKey: aztecSecretKey,
@@ -53,7 +53,7 @@ async function main(): Promise<void> {
     deploy: false,
   })
 
-  const node = getNode(pxeUrl)
+  const node = getNode(rpcUrl)
   await pxe.registerContract({
     instance: (await node.getContract(AztecAddress.fromString(aztecGateway7683Address))) as ContractInstanceWithAddress,
     artifact: AztecGateway7683ContractArtifact,

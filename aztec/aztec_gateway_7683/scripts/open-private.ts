@@ -21,12 +21,12 @@ const [
   aztecTokenAddress,
   l2EvmTokenAddress,
   recipientAddress,
-  pxeUrl = "https://aztec-alpha-testnet-fullnode.zkv.xyz",
+  rpcUrl = "https://aztec-alpha-testnet-fullnode.zkv.xyz",
 ] = process.argv
 
 async function main(): Promise<void> {
   const logger = createLogger("open-private")
-  const pxe = await getPxe(pxeUrl)
+  const pxe = await getPxe(rpcUrl)
   const paymentMethod = new SponsoredFeePaymentMethod(await getSponsoredFPCAddress())
   const wallet = await getWalletFromSecretKey({
     secretKey: aztecSecretKey,

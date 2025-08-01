@@ -32,10 +32,10 @@ export const getPXEs = async (names: string[]): Promise<PXE[]> => {
   return pxes
 }
 
-export const getNode = (pxeUrl: string) => createAztecNodeClient(pxeUrl)
+export const getNode = (rpcUrl: string) => createAztecNodeClient(rpcUrl)
 
-export const getPxe = async (pxeUrl: string) => {
-  const node = getNode(pxeUrl)
+export const getPxe = async (rpcUrl: string) => {
+  const node = getNode(rpcUrl)
   const fullConfig = {
     ...getPXEServiceConfig(),
     l1Contracts: await node.getL1ContractAddresses(),

@@ -12,12 +12,12 @@ const [
   l2Gateway7683Address,
   l2Gateway7683Domain,
   forwarderAddress,
-  pxeUrl = "https://aztec-alpha-testnet-fullnode.zkv.xyz",
+  rpcUrl = "https://aztec-alpha-testnet-fullnode.zkv.xyz",
 ] = process.argv
 
 const main = async () => {
   const logger = createLogger("deploy")
-  const pxe = await getPxe(pxeUrl)
+  const pxe = await getPxe(rpcUrl)
   const paymentMethod = new SponsoredFeePaymentMethod(await getSponsoredFPCAddress())
   const wallet = await getWalletFromSecretKey({
     secretKey: aztecSecretKey,
