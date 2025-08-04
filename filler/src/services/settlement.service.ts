@@ -7,7 +7,7 @@ const { BeaconBlock, SignedBeaconBlock } = ssz.electra
 const { createProof, ProofType } = await import("@chainsafe/persistent-merkle-tree")
 import { Mutex } from "async-mutex"
 
-import BaseService from "./base.service"
+import BaseService from "./base.service.js"
 import {
   AZTEC_7683_CHAIN_ID,
   AZTEC_VERSION,
@@ -21,18 +21,18 @@ import {
   FORWARDER_ADDRESS,
   SETTLE_ORDER_TYPE,
   AZTEC_ROLLUP_CONTRACT_L1_ADDRESS,
-} from "../constants"
-import forwarderAbi from "../abis/forwarder"
-import l2Gateway7683Abi from "../abis/l2Gateway7683"
-import anchorRegistryAbi from "../abis/anchorRegistry"
-import rollupAbi from "../abis/rollup"
-import { AztecGateway7683Contract } from "../artifacts/AztecGateway7683/AztecGateway7683"
+} from "../constants.js"
+import forwarderAbi from "../abis/forwarder.js"
+import l2Gateway7683Abi from "../abis/l2Gateway7683.js"
+import anchorRegistryAbi from "../abis/anchorRegistry.js"
+import rollupAbi from "../abis/rollup.js"
+import { AztecGateway7683Contract } from "../artifacts/AztecGateway7683/AztecGateway7683.js"
 
 import type { Chain } from "viem"
 import type { AccountWalletWithSecretKey, AztecNode, PXE } from "@aztec/aztec.js"
-import type { BaseServiceOpts } from "./base.service"
-import type { Order } from "../types"
-import type MultiClient from "../MultiClient"
+import type { BaseServiceOpts } from "./base.service.js"
+import type { Order } from "../types.js"
+import type MultiClient from "../MultiClient.js"
 
 export type SettlementServiceOpts = BaseServiceOpts & {
   aztecWallet: AccountWalletWithSecretKey

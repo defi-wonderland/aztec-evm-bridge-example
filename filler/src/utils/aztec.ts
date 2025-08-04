@@ -12,9 +12,10 @@ import { SponsoredFPCContract, SponsoredFPCContractArtifact } from "@aztec/noir-
 import { createPXEService, getPXEServiceConfig } from "@aztec/pxe/server"
 import { createStore } from "@aztec/kv-store/lmdb"
 
+import { AztecGateway7683ContractArtifact } from "../artifacts/AztecGateway7683/AztecGateway7683.js"
+
 import type { AztecNode, ContractInstanceWithAddress, PXE, AccountWalletWithSecretKey } from "@aztec/aztec.js"
-import type { ResolvedOrder } from "../types"
-import { AztecGateway7683ContractArtifact } from "../artifacts/AztecGateway7683/AztecGateway7683"
+import type { ResolvedOrder } from "../types.js"
 
 type RegisterContractOptions = {
   artifact: any

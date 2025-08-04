@@ -4,8 +4,10 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js",
+    "dev": " NODE_NO_WARNINGS=1 node --loader ts-node/esm src/index.ts",
     "lint": "eslint --ignore-path ./.eslintignore --ext .js,.ts .",
-    "start": " NODE_NO_WARNINGS=1 node --loader ts-node/esm src/index.ts",
     "prettier:check": "prettier --check \"**/*.{js,json,md,sol,ts,yml}\"",
     "prettier:write": "prettier --write \"**/*.{js,json,md,sol,ts,yml}\""
   },

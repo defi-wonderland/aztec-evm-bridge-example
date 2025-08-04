@@ -11,10 +11,28 @@ nvm use
 yarn install
 ```
 
-## 🔧 Usage
+---
 
-Before starting it, ensure you have created a `.env` file based on the structure provided in `.env.example`. Then:
+## 🚀 Development
 
-```sh
+To start the dev server with hot reload:
+
+```bash
+yarn dev
+```
+
+---
+
+## 🧱 Build
+
+To compile the TypeScript source into `dist/`:
+
+```bash
+yarn build
+```
+
+Start the compiled version with:
+
+```bash
 yarn start
 ```

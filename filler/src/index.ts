@@ -37,10 +37,10 @@ const main = async () => {
     aztecGatewayAddress: AZTEC_GATEWAY_ADDRESS,
   })
 
-  const l2EvmChain = Object.values(chains).find(
+  const l2EvmChain = (Object.values(chains) as chains.Chain[]).find(
     ({ id }) => id.toString() === (process.env.EVM_L2_CHAIN_ID as string),
   ) as chains.Chain
-  const l1Chain = Object.values(chains).find(
+  const l1Chain = (Object.values(chains) as chains.Chain[]).find(
     ({ id }) => id.toString() === (process.env.FORWARDER_CHAIN_ID as string),
   ) as chains.Chain
 

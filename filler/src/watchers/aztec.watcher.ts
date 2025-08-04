@@ -1,10 +1,10 @@
 import winston from "winston"
 import { AztecAddress } from "@aztec/aztec.js"
 
-import { parseOpenLog, parseResolvedCrossChainOrder } from "../utils/aztec"
+import { parseOpenLog, parseResolvedCrossChainOrder } from "../utils/aztec.js"
 
 import type { PXE } from "@aztec/aztec.js"
-import type { ResolvedOrder } from "../types"
+import type { ResolvedOrder } from "../types.js"
 
 interface WatcherConfigs {
   service: string
