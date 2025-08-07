@@ -1,5 +1,17 @@
-import { Chain, createClient, createWalletClient, custom, erc20Abi, Hex, hexToBytes, http, padHex } from "viem"
-import { AztecAddress, Fr, PXE, AztecNode } from "@aztec/aztec.js"
+import {
+  AbiEvent,
+  Chain,
+  createClient,
+  createPublicClient,
+  createWalletClient,
+  custom,
+  erc20Abi,
+  Hex,
+  hexToBytes,
+  http,
+  padHex,
+} from "viem"
+import { AztecAddress, Fr, PXE, AztecNode, TxHash, sleep, TxReceipt } from "@aztec/aztec.js"
 import { AzguardClient } from "@azguardwallet/client"
 import { OkResult, SendTransactionResult } from "@azguardwallet/types"
 import { deriveSigningKey } from "@aztec/stdlib/keys"
@@ -8,6 +20,7 @@ import { TokenContract, TokenContractArtifact } from "@aztec/noir-contracts.js/T
 import { poseidon2Hash } from "@aztec/foundation/crypto"
 import { waitForTransactionReceipt } from "viem/actions"
 import { privateKeyToAccount } from "viem/accounts"
+import { SponsoredFPCContractArtifact } from "@aztec/noir-contracts.js/SponsoredFPC"
 
 import { OrderData, getAztecAddressFromAzguardAccount } from "./utils"
 import {
@@ -26,11 +39,11 @@ import {
 } from "./utils/artifacts/AztecGateway7683/AztecGateway7683"
 import l2Gateway7683Abi from "./utils/abi/l2Gateway7683"
 import { getSponsoredFPCInstance, getSponsporedFeePaymentMethod } from "./utils/fpc"
-import { SponsoredFPCContractArtifact } from "@aztec/noir-contracts.js/SponsoredFPC"
+import { getResolvedOrdersByLogs } from "./utils/gateway"
 
 type SwapMode = "private" | "public" | "privateWithHook" | "publicWithHook"
 
-interface SwapOptions {
+interface Order {
   chainIn: Chain | { id: number; name: string }
   chainOut: Chain | { id: number; name: string }
   amountIn: bigint
@@ -41,67 +54,77 @@ interface SwapOptions {
   mode: SwapMode
   data: Hex
   fillDeadline?: number
-  onSecret?: (secret: Hex) => void
 }
 
-interface AztecEvmConfigs {
+interface OrderResult {
+  orderCreatedTxHash: Hex
+  orderFilledTxHash: Hex
+}
+
+interface OrderCallbacks {
+  onSecret?: (secret: Hex) => void
+  onOrderCreated?: (txHash: Hex) => void
+  onOrderFilled?: (txHash: Hex) => void
+}
+
+interface BridgeConfigs {
   azguardClient?: AzguardClient
   aztecNode?: AztecNode
   aztecPxe?: PXE
-  aztecSalt?: Hex
+  aztecKeySalt?: Hex
   aztecSecretKey?: Hex
   evmPrivateKey?: Hex
   evmProvider?: any
 }
 
-export class AztecEvmSwapper {
+export class Bridge {
   #azguardClient?: AzguardClient
   #aztecNode?: AztecNode
   #aztecPxe?: PXE
-  #aztecSalt?: Hex
+  #aztecKeySalt?: Hex
   #aztecSecretKey?: Hex
   #evmPrivateKey?: Hex
   #evmProvider?: any
   #walletAccountRegistered = false
 
-  constructor(configs: AztecEvmConfigs) {
-    const { azguardClient, aztecNode, aztecPxe, aztecSalt, aztecSecretKey, evmPrivateKey, evmProvider } = configs
+  constructor(configs: BridgeConfigs) {
+    const { azguardClient, aztecNode, aztecPxe, aztecKeySalt, aztecSecretKey, evmPrivateKey, evmProvider } = configs
+
+    if (!aztecSecretKey && !aztecKeySalt && !azguardClient) {
+      throw new Error("You must specify aztecSecretKey and aztecKeySalt or azguardClient")
+    }
 
     if (evmPrivateKey && evmProvider) {
-      throw new Error("Cannot specify both private key and provider")
+      throw new Error("Cannot specify both evmPrivateKey and evmProvider")
     }
 
-    if (azguardClient && aztecSecretKey && aztecSalt && aztecPxe) {
-      throw new Error("Cannot specify both private key, salt, pxe and Azguard client")
+    if (azguardClient && aztecSecretKey && aztecKeySalt && aztecPxe) {
+      throw new Error("Cannot specify both aztecSecretKey, aztecKeySalt, pxe and azguardClient")
     }
 
-    if ((aztecSecretKey && !aztecSalt) || (!aztecSecretKey && aztecSalt)) {
-      throw new Error("You must specify both private key and salt for Aztec")
+    if ((aztecSecretKey && !aztecKeySalt) || (!aztecSecretKey && aztecKeySalt)) {
+      throw new Error("You must specify both aztecSecretKey and aztecKeySalt")
     }
 
-    if (aztecSecretKey && aztecSalt && !aztecPxe) {
-      throw new Error("You must specify the pxe when using aztecSecretKey and aztecSalt")
+    if (aztecSecretKey && aztecKeySalt && !aztecPxe) {
+      throw new Error("You must specify the aztecPxe when using aztecSecretKey and aztecKeySalt")
     }
 
-    if (aztecSecretKey && aztecSalt && !aztecNode) {
-      throw new Error("You must specify the Aztec node when using aztecSecretKey and aztecSalt")
-    }
-
-    if (azguardClient && aztecPxe) {
-      throw new Error("Cannot specify both pxe and Azguard client")
+    if (aztecSecretKey && aztecKeySalt && !aztecNode) {
+      throw new Error("You must specify the aztecNode when using aztecSecretKey and aztecKeySalt")
     }
 
     this.#azguardClient = azguardClient
     this.#aztecNode = aztecNode
     this.#aztecPxe = aztecPxe
-    this.#aztecSalt = aztecSalt
+    this.#aztecKeySalt = aztecKeySalt
     this.#aztecSecretKey = aztecSecretKey
     this.#evmPrivateKey = evmPrivateKey
     this.#evmProvider = evmProvider
   }
 
-  async swap(options: SwapOptions): Promise<Hex> {
-    const { chainIn, chainOut, mode, data } = options
+  async createOrder(order: Order, callbacks?: OrderCallbacks): Promise<OrderResult> {
+    const { chainIn, chainOut, mode, data } = order
 
     if (chainIn.id === chainOut.id) throw new Error("Invalid chains: source and destination must differ")
 
@@ -111,24 +134,26 @@ export class AztecEvmSwapper {
     if (data.length !== 66) throw new Error("Invalid data: must be 32 bytes")
 
     if (chainIn.id === aztecSepolia.id) {
-      return this.#aztecToEvm(options)
+      return this.#aztecToEvm(order, callbacks)
     } else if (chainOut.id === aztecSepolia.id) {
-      return this.#evmToAztec(options)
+      throw new Error("ciao")
+      //return this.#evmToAztec(order)
     } else {
       throw new Error("Neither chain is Aztec")
     }
   }
 
-  async #aztecToEvm(options: SwapOptions): Promise<Hex> {
-    if (this.#azguardClient) return this.#aztecToEvmAzguard(options)
-    return this.#aztecToEvmDefault(options)
+  async #aztecToEvm(order: Order, callbacks?: OrderCallbacks): Promise<OrderResult> {
+    if (this.#azguardClient) return this.#aztecToEvmAzguard(order, callbacks)
+    return this.#aztecToEvmDefault(order, callbacks)
   }
 
-  async #aztecToEvmAzguard(options: SwapOptions): Promise<Hex> {
-    const { chainOut, mode, data, amountIn, amountOut, tokenIn, tokenOut, chainIn, recipient } = options
+  async #aztecToEvmAzguard(order: Order, callbacks?: OrderCallbacks): Promise<OrderResult> {
+    const { chainOut, mode, data, amountIn, amountOut, tokenIn, tokenOut, chainIn, recipient } = order
+    const { onOrderCreated } = callbacks || {}
     const { gatewayIn, gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
 
-    const fillDeadline = options.fillDeadline ?? 2 ** 32 - 1
+    const fillDeadline = order.fillDeadline ?? 2 ** 32 - 1
     const nonce = Fr.random()
     // NOTE: Azguard currently doesn't expose the actively selected account.
     // As a workaround, we default to using accounts[0], assuming it's the connected one.
@@ -192,13 +217,31 @@ export class AztecEvmSwapper {
         throw new Error(res.error)
       }
     }
+    const orderCreatedTxHash = (response[1] as OkResult<SendTransactionResult>).result as Hex
 
-    const txHash = (response[1] as OkResult<SendTransactionResult>).result
-    return txHash as Hex
+    const waitForReceipt = async (txHash: string): Promise<TxReceipt> => {
+      while (true) {
+        const receipt = await this.#aztecNode!.getTxReceipt(TxHash.fromString(txHash))
+        if (receipt.status === "success") return receipt
+        if (receipt.status === "pending") {
+          await sleep(5000)
+          continue
+        }
+        throw new Error("Aztec transaction failed")
+      }
+    }
+    const orderCreatedReceipt = await waitForReceipt(orderCreatedTxHash)
+    onOrderCreated?.(orderCreatedTxHash)
+
+    const orderFilledTxHash = await this.#monitorAztecToEvmOrder(order, orderCreatedReceipt, callbacks)
+    return {
+      orderCreatedTxHash,
+      orderFilledTxHash,
+    }
   }
 
-  async #aztecToEvmDefault(options: SwapOptions): Promise<Hex> {
-    const { chainOut, mode, data, amountIn, amountOut, tokenIn, tokenOut, chainIn, recipient } = options
+  async #aztecToEvmDefault(order: Order, callbacks?: OrderCallbacks): Promise<OrderResult> {
+    const { chainOut, mode, data, amountIn, amountOut, tokenIn, tokenOut, chainIn, recipient } = order
     const { gatewayIn, gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
     const wallet = await this.#getAztecWallet()
 
@@ -211,7 +254,7 @@ export class AztecEvmSwapper {
       artifact: TokenContractArtifact,
     })
 
-    const fillDeadline = options.fillDeadline ?? 2 ** 32 - 1
+    const fillDeadline = order.fillDeadline ?? 2 ** 32 - 1
     const nonce = Fr.random()
     const isPrivate = mode.includes("private")
 
@@ -253,20 +296,73 @@ export class AztecEvmSwapper {
         authWitnesses: [witness],
       })
       .send({ fee: { paymentMethod: await getSponsporedFeePaymentMethod() } })
-      .wait()
+      .wait({
+        timeout: 120000,
+      })
 
-    return receipt.txHash.toString()
+    const orderFilledTxHash = await this.#monitorAztecToEvmOrder(order, receipt, callbacks)
+    return {
+      orderCreatedTxHash: receipt.txHash.toString(),
+      orderFilledTxHash,
+    }
   }
 
-  async #evmToAztec(options: SwapOptions): Promise<Hex> {
-    const { amountIn, amountOut, chainIn, chainOut, data, mode, onSecret, recipient, tokenIn, tokenOut } = options
+  async #monitorAztecToEvmOrder(order: Order, receipt: TxReceipt, callbacks?: OrderCallbacks): Promise<Hex> {
+    const { chainIn, chainOut } = order
+    const { onOrderFilled } = callbacks || {}
     const { gatewayIn, gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
 
-    const fillDeadline = options.fillDeadline ?? 2 ** 32 - 1
+    const { logs } = await this.#aztecNode!.getPublicLogs({
+      fromBlock: receipt.blockNumber! - 1,
+      toBlock: receipt.blockNumber! + 1,
+      contractAddress: AztecAddress.fromString(gatewayIn),
+    })
+    // TODO: handle multiple orders in the same tx
+    const [resolvedOrder] = getResolvedOrdersByLogs(logs)
+
+    const evmPublicClient = createPublicClient({
+      chain: chainOut as Chain,
+      transport: http(),
+    })
+    const waitForFilledOrder = async (orderId: Hex): Promise<Hex> => {
+      while (true) {
+        const result: any = await evmPublicClient.readContract({
+          address: gatewayOut,
+          abi: l2Gateway7683Abi,
+          functionName: "filledOrders",
+          args: [orderId],
+        })
+        if (result[0] !== "0x" && result[1] !== "0x") break
+        await sleep(5000)
+      }
+
+      const currentBlock = await evmPublicClient.getBlockNumber()
+      const [log] = await evmPublicClient.getLogs({
+        address: gatewayOut,
+        event: l2Gateway7683Abi.find((el) => el.type === "event" && el.name === "Filled") as AbiEvent,
+        args: {
+          orderId,
+        },
+        fromBlock: currentBlock - 100n,
+        toBlock: currentBlock,
+      })
+      return log.transactionHash
+    }
+    const orderFilledTxHash = await waitForFilledOrder(resolvedOrder.orderId)
+    onOrderFilled?.(orderFilledTxHash)
+    return orderFilledTxHash
+  }
+
+  async #evmToAztec(order: Order, callbacks?: OrderCallbacks): Promise<Hex> {
+    const { amountIn, amountOut, chainIn, chainOut, data, mode, recipient, tokenIn, tokenOut } = order
+    const { onSecret } = callbacks || {}
+    const { gatewayIn, gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
+
+    const fillDeadline = order.fillDeadline ?? 2 ** 32 - 1
     const nonce = Fr.random()
     const isPrivate = mode.includes("private")
     const secret = isPrivate ? Fr.random() : null
-    if (secret && onSecret) onSecret(secret.toString())
+    if (secret) onSecret?.(secret.toString())
 
     const walletClient = this.#getEvmWalletClient(chainIn as Chain)
 
@@ -328,7 +424,7 @@ export class AztecEvmSwapper {
 
   async #getAztecWallet() {
     const secretKey = Fr.fromHexString(this.#aztecSecretKey!)
-    const salt = Fr.fromHexString(this.#aztecSalt!)
+    const salt = Fr.fromHexString(this.#aztecKeySalt!)
     const signingKey = deriveSigningKey(secretKey)
     const account = await getSchnorrAccount(this.#aztecPxe!, secretKey, signingKey, salt)
     if (!this.#walletAccountRegistered) {
@@ -360,7 +456,7 @@ export class AztecEvmSwapper {
         })
   }
 
-  #getOrderType(mode: SwapOptions["mode"]): number {
+  #getOrderType(mode: Order["mode"]): number {
     switch (mode) {
       case "private":
         return PRIVATE_ORDER
@@ -376,8 +472,8 @@ export class AztecEvmSwapper {
   }
 
   #getGatewaysByChains(
-    chainIn: SwapOptions["chainIn"],
-    chainOut: SwapOptions["chainOut"],
+    chainIn: Order["chainIn"],
+    chainOut: Order["chainOut"],
   ): {
     gatewayIn: Hex
     gatewayOut: Hex

@@ -1,3 +1,4 @@
+import "dotenv/config"
 import { defineConfig } from "vitest/config"
 
 export default defineConfig({
@@ -7,5 +8,6 @@ export default defineConfig({
     coverage: {
       reporter: ["text", "json", "html"],
     },
+    testTimeout: 15 * 60 * 1000,
   },
 })

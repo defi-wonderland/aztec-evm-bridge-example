@@ -17,10 +17,10 @@ npm install @substancelabs/aztec-evm-bridge-sdk
 
 ## 🚀 Quick Start
 
-Here's a basic example showing how to initiate a swap **from Aztec to Base**:
+Here's a basic example showing how to initiate a createOrder **from Aztec to Base**:
 
 ```ts
-import { AztecEvmSwapper, aztecSepolia } from "@substancelabs/aztec-evm-bridge-sdk"
+import { Bridge, aztecSepolia } from "@substancelabs/aztec-evm-bridge-sdk"
 import { createAztecNodeClient, waitForPXE } from "@aztec/aztec.js"
 import { createStore } from "@aztec/kv-store/lmdb"
 import { getPXEServiceConfig } from "@aztec/pxe/config"
@@ -44,21 +44,21 @@ const pxe = await createPXEService(node, fullConfig, {
 })
 await waitForPXE(pxe)
 
-const swapper = new AztecEvmSwapper({
+const bridge = new Bridge({
   evmPrivateKey: "0x...",
   aztecSecretKey: "0x...",
-  aztecSalt: "0x...",
+  aztecKeySalt: "0x...",
   aztecPxe: pxe,
   aztecNode: node,
 })
-swapper
-  .swap({
+bridge
+  .createOrder({
     chainIn: aztecSepolia as Chain,
     chainOut: baseSepolia,
     amountIn: 1n,
-    amountOut: 1n,
+    amountOut: 1n, // amountOut must be less than amountIn. It should count the slippage
     tokenIn: "0x...",
-    tokenOut: "0x...",
+    tokenOut: "0x...", 
     mode: "private", // privateWithHook, public, or publicWithHook
     data: padHex("0x"),
     recipient: padHex("0x"),
