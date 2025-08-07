@@ -1,0 +1,40 @@
+{
+  "name": "@substancelabs/aztec-evm-bridge-sdk",
+  "version": "0.0.1",
+  "main": "dist/index.cjs",
+  "module": "dist/index.esm.js",
+  "exports": {
+    ".": {
+      "import": "./dist/index.esm.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts",
+    "clean": "rm -rf dist",
+    "format": "prettier --write \"**/*.{json,ts}\"",
+    "test": "vitest",
+    "test:watch": "vitest --watch",
+    "test:coverage": "vitest run --coverage"
+  },
+  "devDependencies": {
+    "@azguardwallet/types": "^0.4.1",
+    "@types/node": "^24.2.0",
+    "prettier": "^3.6.2",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "@azguardwallet/client": "^0.4.2",
+    "@aztec/accounts": "1.1.3",
+    "@aztec/aztec.js": "1.1.3",
+    "@aztec/foundation": "1.1.3",
+    "@aztec/kv-store": "1.1.3",
+    "@aztec/noir-contracts.js": "1.1.3",
+    "@aztec/pxe": "1.1.3",
+    "@aztec/stdlib": "1.1.3",
+    "viem": "^2.33.2"
+  }
+}
