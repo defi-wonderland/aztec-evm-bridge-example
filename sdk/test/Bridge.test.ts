@@ -50,7 +50,7 @@ const setup = async () => {
 }
 
 describe("Bridge", () => {
-  /*describe("Initialization", () => {
+  describe("Initialization", () => {
     it("cannot initialize bridge without aztecSecretKey and aztecKeySalt or azguardClient", async () => {
       const createBridge = () =>
         new Bridge({
@@ -118,9 +118,9 @@ describe("Bridge", () => {
         })
       expect(createBridge).to.throw("You must specify the aztecNode when using aztecSecretKey and aztecKeySalt")
     })
-  })*/
+  })
 
-  /*describe("Aztec -> Base", () => {
+  describe("Aztec -> Base", () => {
     it("should create a public order from Aztec to Base", async () => {
       const { aztecPxe, aztecNode } = await setup()
 
@@ -136,7 +136,7 @@ describe("Bridge", () => {
         aztecPxe,
         aztecNode,
       })
-        let onOrderCreatedCalled = false
+      let onOrderCreatedCalled = false
       let onOrderFilledCalled = false
       const result = await bridge.createOrder(
         {
@@ -151,8 +151,12 @@ describe("Bridge", () => {
           recipient: padHex(privateKeyToAddress(process.env.EVM_PK as Hex)),
         },
         {
-          onOrderCreated: () => { onOrderCreatedCalled = true },
-          onOrderFilled: () => { onOrderFilledCalled = true },
+          onOrderCreated: () => {
+            onOrderCreatedCalled = true
+          },
+          onOrderFilled: () => {
+            onOrderFilledCalled = true
+          },
         },
       )
       expect(isHex(result.orderCreatedTxHash)).toBe(true)
@@ -190,7 +194,7 @@ describe("Bridge", () => {
       expect(isHex(result.orderCreatedTxHash)).toBe(true)
       expect(isHex(result.orderFilledTxHash)).toBe(true)
     })
-  })*/
+  })
 
   describe("Base -> Aztec", () => {
     it("should be able to open a private order from Base to Aztec", async () => {
@@ -240,14 +244,49 @@ describe("Bridge", () => {
         },
       )
       expect(isHex(result.orderCreatedTxHash)).toBe(true)
+      expect(isHex(result.orderClaimedTxHash)).toBe(true)
       expect(onSecretCalled).toBe(true)
       expect(onOrderCreatedCalled).toBe(true)
       expect(onOrderFilledCalled).toBe(true)
       expect(onOrderClaimedCalled).toBe(true)
     })
 
-    it("should be able to open a publoc order from Base to Aztec", async () => {
-      // TODO
+    it("should be able to open a public order from Base to Aztec", async () => {
+      const { aztecPxe, aztecNode, aztecAccount } = await setup()
+      const bridge = new Bridge({
+        evmPrivateKey: process.env.EVM_PK as Hex,
+        aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
+        aztecKeySalt: process.env.AZTEC_KEY_SALT as Hex,
+        aztecPxe,
+        aztecNode,
+      })
+
+      let onOrderCreatedCalled = false
+      let onOrderFilledCalled = false
+      const result = await bridge.createOrder(
+        {
+          chainIn: baseSepolia,
+          chainOut: aztecSepolia as Chain,
+          amountIn: 1n,
+          amountOut: 1n,
+          tokenIn: WETH_ON_BASE_SEPOLIA_ADDRESS,
+          tokenOut: WETH_ON_AZTEC_SEPOLIA_ADDRESS,
+          mode: "public",
+          data: padHex("0x"),
+          recipient: aztecAccount!.getAddress().toString(),
+        },
+        {
+          onOrderCreated: () => {
+            onOrderCreatedCalled = true
+          },
+          onOrderFilled: () => {
+            onOrderFilledCalled = true
+          },
+        },
+      )
+      expect(isHex(result.orderCreatedTxHash)).toBe(true)
+      expect(onOrderCreatedCalled).toBe(true)
+      expect(onOrderFilledCalled).toBe(true)
     })
   })
 })

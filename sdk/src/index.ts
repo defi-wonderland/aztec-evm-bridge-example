@@ -110,7 +110,7 @@ export class Bridge {
     }
 
     if (azguardClient && aztecSecretKey && aztecKeySalt && aztecPxe) {
-      throw new Error("Cannot specify both aztecSecretKey, aztecKeySalt, pxe and azguardClient")
+      throw new Error("Cannot specify both aztecSecretKey, aztecKeySalt, aztecPxe and azguardClient")
     }
 
     if ((aztecSecretKey && !aztecKeySalt) || (!aztecSecretKey && aztecKeySalt)) {
