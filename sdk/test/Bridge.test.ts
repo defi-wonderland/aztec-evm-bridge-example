@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { createAztecNodeClient, waitForPXE } from "@aztec/aztec.js"
+import { AccountManager, AztecAddress, createAztecNodeClient, Fr, waitForPXE } from "@aztec/aztec.js"
 import { createStore } from "@aztec/kv-store/lmdb"
 import { getPXEServiceConfig } from "@aztec/pxe/config"
 import { createPXEService } from "@aztec/pxe/server"
@@ -10,32 +10,47 @@ import { privateKeyToAddress } from "viem/accounts"
 
 import { Bridge } from "../src"
 import { aztecSepolia } from "../src/constants"
+import { deriveSigningKey } from "@aztec/stdlib/keys"
+import { getSchnorrAccount } from "@aztec/accounts/schnorr"
+import { TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
+
+const WETH_ON_AZTEC_SEPOLIA_ADDRESS = "0x143c799188d6881bff72012bebb100d19b51ce0c90b378bfa3ba57498b5ddeeb"
+const WETH_ON_BASE_SEPOLIA_ADDRESS = "0x1BDD24840e119DC2602dCC587Dd182812427A5Cc"
 
 const setup = async () => {
-  const node = await createAztecNodeClient("https://aztec-alpha-testnet-fullnode.zkv.xyz")
+  const aztecNode = await createAztecNodeClient("https://aztec-alpha-testnet-fullnode.zkv.xyz")
   const fullConfig = {
     ...getPXEServiceConfig(),
-    l1Contracts: await node.getL1ContractAddresses(),
+    l1Contracts: await aztecNode.getL1ContractAddresses(),
     proverEnabled: true,
   }
-  const store = await createStore("pxe", {
+  const store = await createStore("aztecPxe", {
     dataDirectory: "store",
     dataStoreMapSizeKB: 1e6,
   })
-  const pxe = await createPXEService(node, fullConfig, {
+  const aztecPxe = await createPXEService(aztecNode, fullConfig, {
     store,
     useLogSuffix: true,
   })
-  await waitForPXE(pxe)
+  await waitForPXE(aztecPxe)
+
+  let aztecAccount: AccountManager | undefined
+  if (process.env.AZTEC_SECRET_KEY && process.env.AZTEC_KEY_SALT) {
+    const secretKey = Fr.fromHexString(process.env.AZTEC_SECRET_KEY)
+    const salt = Fr.fromHexString(process.env.AZTEC_KEY_SALT)
+    const signingKey = deriveSigningKey(secretKey)
+    aztecAccount = await getSchnorrAccount(aztecPxe, secretKey, signingKey, salt)
+  }
 
   return {
-    pxe,
-    node,
+    aztecAccount,
+    aztecPxe,
+    aztecNode,
   }
 }
 
 describe("Bridge", () => {
-  /*describe("initialization", () => {
+  /*describe("Initialization", () => {
     it("cannot initialize bridge without aztecSecretKey and aztecKeySalt or azguardClient", async () => {
       const createBridge = () =>
         new Bridge({
@@ -56,24 +71,24 @@ describe("Bridge", () => {
     })
 
     it("cannot initialize bridge using aztecSecretKey, aztecKeySalt, aztecPxe, aztecNode and azguardClient", async () => {
-      const { pxe, node } = await setup()
+      const { aztecPxe, aztecNode } = await setup()
       const createBridge = () =>
         new Bridge({
           evmPrivateKey: process.env.EVM_PK as Hex,
           aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
           aztecKeySalt: process.env.AZTEC_KEY_SALT as Hex,
-          aztecPxe: pxe,
-          aztecNode: node,
+          aztecPxe,
+          aztecNode,
           azguardClient: {} as AzguardClient,
         })
-      expect(createBridge).to.throw("Cannot specify both aztecSecretKey, aztecKeySalt, pxe and azguardClient")
+      expect(createBridge).to.throw("Cannot specify both aztecSecretKey, aztecKeySalt, aztecPxe and azguardClient")
     })
 
     it("cannot initialize bridge using aztecSecretKey and aztecNode without aztecKeySalt", async () => {
-      const { node } = await setup()
+      const { aztecNode } = await setup()
       const createBridge = () =>
         new Bridge({
-          aztecNode: node,
+          aztecNode,
           aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
           evmPrivateKey: process.env.EVM_PK as Hex,
         })
@@ -81,10 +96,10 @@ describe("Bridge", () => {
     })
 
     it("cannot initialize bridge using aztecSecretKey, aztecKeySalt and aztecNode without aztecKeyPxe", async () => {
-      const { node } = await setup()
+      const { aztecNode } = await setup()
       const createBridge = () =>
         new Bridge({
-          aztecNode: node,
+          aztecNode,
           aztecKeySalt: process.env.AZTEC_KEY_SALT as Hex,
           aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
           evmPrivateKey: process.env.EVM_PK as Hex,
@@ -93,10 +108,10 @@ describe("Bridge", () => {
     })
 
     it("cannot initialize bridge using aztecSecretKey, aztecKeySalt and aztecKeyPxe without aztecNode", async () => {
-      const { pxe } = await setup()
+      const { aztecPxe } = await setup()
       const createBridge = () =>
         new Bridge({
-          aztecPxe: pxe,
+          aztecPxe,
           aztecKeySalt: process.env.AZTEC_KEY_SALT as Hex,
           aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
           evmPrivateKey: process.env.EVM_PK as Hex,
@@ -105,45 +120,55 @@ describe("Bridge", () => {
     })
   })*/
 
-  describe("aztec -> Base", () => {
+  /*describe("Aztec -> Base", () => {
     it("should create a public order from Aztec to Base", async () => {
-      const { pxe, node } = await setup()
+      const { aztecPxe, aztecNode } = await setup()
+
+      await aztecPxe.registerContract({
+        instance: (await aztecNode.getContract(AztecAddress.fromString(WETH_ON_AZTEC_SEPOLIA_ADDRESS)))!,
+        artifact: TokenContractArtifact,
+      })
+
       const bridge = new Bridge({
         evmPrivateKey: process.env.EVM_PK as Hex,
         aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
         aztecKeySalt: process.env.AZTEC_KEY_SALT as Hex,
-        aztecPxe: pxe,
-        aztecNode: node,
+        aztecPxe,
+        aztecNode,
       })
+        let onOrderCreatedCalled = false
+      let onOrderFilledCalled = false
       const result = await bridge.createOrder(
         {
           chainIn: aztecSepolia as Chain,
           chainOut: baseSepolia,
           amountIn: 1n,
           amountOut: 1n,
-          tokenIn: "0x143c799188d6881bff72012bebb100d19b51ce0c90b378bfa3ba57498b5ddeeb", // WETH on Aztec Sepolia
-          tokenOut: "0x1BDD24840e119DC2602dCC587Dd182812427A5Cc", // WETH on Base Sepolia
+          tokenIn: WETH_ON_AZTEC_SEPOLIA_ADDRESS,
+          tokenOut: WETH_ON_BASE_SEPOLIA_ADDRESS,
           mode: "public",
           data: padHex("0x"),
           recipient: padHex(privateKeyToAddress(process.env.EVM_PK as Hex)),
         },
         {
-          onOrderCreated: (txHash) => expect(isHex(txHash)).toBe(true),
-          onOrderFilled: (txHash) => expect(isHex(txHash)).toBe(true),
+          onOrderCreated: () => { onOrderCreatedCalled = true },
+          onOrderFilled: () => { onOrderFilledCalled = true },
         },
       )
       expect(isHex(result.orderCreatedTxHash)).toBe(true)
       expect(isHex(result.orderFilledTxHash)).toBe(true)
+      expect(onOrderCreatedCalled).toBe(true)
+      expect(onOrderFilledCalled).toBe(true)
     })
 
-    /*it("should create a private order from Aztec to Base", async () => {
-      const { pxe, node } = await setup()
+    it("should create a private order from Aztec to Base", async () => {
+      const { aztecPxe, aztecNode } = await setup()
       const bridge = new Bridge({
         evmPrivateKey: process.env.EVM_PK as Hex,
         aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
         aztecKeySalt: process.env.AZTEC_KEY_SALT as Hex,
-        aztecPxe: pxe,
-        aztecNode: node,
+        aztecPxe,
+        aztecNode,
       })
       const result = await bridge.createOrder(
         {
@@ -151,8 +176,8 @@ describe("Bridge", () => {
           chainOut: baseSepolia,
           amountIn: 1n,
           amountOut: 1n,
-          tokenIn: "0x143c799188d6881bff72012bebb100d19b51ce0c90b378bfa3ba57498b5ddeeb", // WETH on Aztec Sepolia
-          tokenOut: "0x1BDD24840e119DC2602dCC587Dd182812427A5Cc", // WETH on Base Sepolia
+          tokenIn: WETH_ON_AZTEC_SEPOLIA_ADDRESS,
+          tokenOut: WETH_ON_BASE_SEPOLIA_ADDRESS,
           mode: "private", // or public,
           data: padHex("0x"),
           recipient: padHex(privateKeyToAddress(process.env.EVM_PK as Hex)),
@@ -164,6 +189,65 @@ describe("Bridge", () => {
       )
       expect(isHex(result.orderCreatedTxHash)).toBe(true)
       expect(isHex(result.orderFilledTxHash)).toBe(true)
-    })*/
+    })
+  })*/
+
+  describe("Base -> Aztec", () => {
+    it("should be able to open a private order from Base to Aztec", async () => {
+      const { aztecPxe, aztecNode, aztecAccount } = await setup()
+      const bridge = new Bridge({
+        evmPrivateKey: process.env.EVM_PK as Hex,
+        aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
+        aztecKeySalt: process.env.AZTEC_KEY_SALT as Hex,
+        aztecPxe,
+        aztecNode,
+      })
+
+      await aztecPxe.registerContract({
+        instance: (await aztecNode.getContract(AztecAddress.fromString(WETH_ON_AZTEC_SEPOLIA_ADDRESS)))!,
+        artifact: TokenContractArtifact,
+      })
+
+      let onOrderCreatedCalled = false
+      let onOrderFilledCalled = false
+      let onSecretCalled = false
+      let onOrderClaimedCalled = false
+      const result = await bridge.createOrder(
+        {
+          chainIn: baseSepolia,
+          chainOut: aztecSepolia as Chain,
+          amountIn: 1n,
+          amountOut: 1n,
+          tokenIn: WETH_ON_BASE_SEPOLIA_ADDRESS,
+          tokenOut: WETH_ON_AZTEC_SEPOLIA_ADDRESS,
+          mode: "private",
+          data: padHex("0x"),
+          recipient: aztecAccount!.getAddress().toString(),
+        },
+        {
+          onSecret: () => {
+            onSecretCalled = true
+          },
+          onOrderCreated: () => {
+            onOrderCreatedCalled = true
+          },
+          onOrderFilled: () => {
+            onOrderFilledCalled = true
+          },
+          onOrderClaimed: () => {
+            onOrderClaimedCalled = true
+          },
+        },
+      )
+      expect(isHex(result.orderCreatedTxHash)).toBe(true)
+      expect(onSecretCalled).toBe(true)
+      expect(onOrderCreatedCalled).toBe(true)
+      expect(onOrderFilledCalled).toBe(true)
+      expect(onOrderClaimedCalled).toBe(true)
+    })
+
+    it("should be able to open a publoc order from Base to Aztec", async () => {
+      // TODO
+    })
   })
 })

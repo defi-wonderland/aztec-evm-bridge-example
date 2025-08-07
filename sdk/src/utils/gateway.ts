@@ -1,7 +1,7 @@
 import type { Fr } from "@aztec/aztec.js"
 import type { ExtendedPublicLog, PublicLog } from "@aztec/stdlib/logs"
 
-export type ParsedFilledLog = {
+export type FilledLog = {
   orderId: `0x${string}`
   fillerData: `0x${string}`
   originData: `0x${string}`
@@ -92,7 +92,7 @@ export const parseOpenLog = (fields1: Fr[], fields2: Fr[]) => {
   }
 }
 
-export const parseFilledLog = (fields: Fr[]) => {
+export const parseFilledLog = (fields: Fr[]): FilledLog => {
   let orderId = fields[0].toString()
   let fillerData = fields[11].toString()
   const residualBytes = fields[12].toString()
@@ -118,13 +118,13 @@ export const parseFilledLog = (fields: Fr[]) => {
     residualBytes.slice(22, 24) +
     fields[10].toString().slice(4, 30)
 
-  orderId = "0x" + orderId.slice(4) + residualBytes.slice(4, 6)
-  fillerData = "0x" + fillerData.slice(4) + residualBytes.slice(24, 26)
+  orderId = `0x${orderId.slice(4) + residualBytes.slice(4, 6)}`
+  fillerData = `0x${fillerData.slice(4) + residualBytes.slice(24, 26)}`
 
   return {
     orderId,
     fillerData,
-    originData,
+    originData: originData as `0x${string}`,
   }
 }
 
