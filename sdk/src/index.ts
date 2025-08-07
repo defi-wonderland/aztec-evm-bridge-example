@@ -136,8 +136,7 @@ export class Bridge {
     if (chainIn.id === aztecSepolia.id) {
       return this.#aztecToEvm(order, callbacks)
     } else if (chainOut.id === aztecSepolia.id) {
-      throw new Error("ciao")
-      //return this.#evmToAztec(order)
+      return this.#evmToAztec(order, callbacks)
     } else {
       throw new Error("Neither chain is Aztec")
     }
@@ -259,7 +258,7 @@ export class Bridge {
     const isPrivate = mode.includes("private")
 
     const orderData = new OrderData({
-      sender: isPrivate ? PRIVATE_SENDER : padHex(wallet.getAddress().toString()),
+      sender: isPrivate ? PRIVATE_SENDER : wallet.getAddress().toString(),
       recipient: padHex(recipient),
       inputToken: padHex(tokenIn),
       outputToken: padHex(tokenOut),
@@ -276,24 +275,46 @@ export class Bridge {
 
     const gateway = await AztecGateway7683Contract.at(AztecAddress.fromString(gatewayIn), wallet)
     const token = await TokenContract.at(AztecAddress.fromString(tokenIn), wallet)
-    const witness = await wallet.createAuthWit({
-      caller: AztecAddress.fromString(gatewayIn),
-      action: token.methods.transfer_to_public(
-        wallet.getAddress(),
-        AztecAddress.fromString(gatewayIn),
-        amountIn,
-        nonce,
-      ),
-    })
 
-    const receipt = await gateway.methods
-      .open_private({
-        fill_deadline: fillDeadline,
-        order_data: Array.from(hexToBytes(orderData.encode())),
-        order_data_type: Array.from(hexToBytes(ORDER_DATA_TYPE)),
+    let witness
+    if (isPrivate) {
+      witness = await wallet.createAuthWit({
+        caller: AztecAddress.fromString(gatewayIn),
+        action: token.methods.transfer_to_public(
+          wallet.getAddress(),
+          AztecAddress.fromString(gatewayIn),
+          amountIn,
+          nonce,
+        ),
       })
+    } else {
+      await (
+        await wallet.setPublicAuthWit(
+          {
+            caller: AztecAddress.fromString(gatewayIn),
+            action: token.methods.transfer_in_public(
+              wallet.getAddress(),
+              AztecAddress.fromString(gatewayIn),
+              amountIn,
+              nonce,
+            ),
+          },
+          true,
+        )
+      )
+        .send({ fee: { paymentMethod: await getSponsporedFeePaymentMethod() } })
+        .wait({
+          timeout: 120000,
+        })
+    }
+
+    const receipt = await gateway.methods[isPrivate ? "open_private" : "open"]({
+      fill_deadline: fillDeadline,
+      order_data: Array.from(hexToBytes(orderData.encode())),
+      order_data_type: Array.from(hexToBytes(ORDER_DATA_TYPE)),
+    })
       .with({
-        authWitnesses: [witness],
+        authWitnesses: witness ? [witness] : [],
       })
       .send({ fee: { paymentMethod: await getSponsporedFeePaymentMethod() } })
       .wait({
@@ -307,53 +328,7 @@ export class Bridge {
     }
   }
 
-  async #monitorAztecToEvmOrder(order: Order, receipt: TxReceipt, callbacks?: OrderCallbacks): Promise<Hex> {
-    const { chainIn, chainOut } = order
-    const { onOrderFilled } = callbacks || {}
-    const { gatewayIn, gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
-
-    const { logs } = await this.#aztecNode!.getPublicLogs({
-      fromBlock: receipt.blockNumber! - 1,
-      toBlock: receipt.blockNumber! + 1,
-      contractAddress: AztecAddress.fromString(gatewayIn),
-    })
-    // TODO: handle multiple orders in the same tx
-    const [resolvedOrder] = getResolvedOrdersByLogs(logs)
-
-    const evmPublicClient = createPublicClient({
-      chain: chainOut as Chain,
-      transport: http(),
-    })
-    const waitForFilledOrder = async (orderId: Hex): Promise<Hex> => {
-      while (true) {
-        const result: any = await evmPublicClient.readContract({
-          address: gatewayOut,
-          abi: l2Gateway7683Abi,
-          functionName: "filledOrders",
-          args: [orderId],
-        })
-        if (result[0] !== "0x" && result[1] !== "0x") break
-        await sleep(5000)
-      }
-
-      const currentBlock = await evmPublicClient.getBlockNumber()
-      const [log] = await evmPublicClient.getLogs({
-        address: gatewayOut,
-        event: l2Gateway7683Abi.find((el) => el.type === "event" && el.name === "Filled") as AbiEvent,
-        args: {
-          orderId,
-        },
-        fromBlock: currentBlock - 100n,
-        toBlock: currentBlock,
-      })
-      return log.transactionHash
-    }
-    const orderFilledTxHash = await waitForFilledOrder(resolvedOrder.orderId)
-    onOrderFilled?.(orderFilledTxHash)
-    return orderFilledTxHash
-  }
-
-  async #evmToAztec(order: Order, callbacks?: OrderCallbacks): Promise<Hex> {
+  async #evmToAztec(order: Order, callbacks?: OrderCallbacks): Promise<OrderResult> {
     const { amountIn, amountOut, chainIn, chainOut, data, mode, recipient, tokenIn, tokenOut } = order
     const { onSecret } = callbacks || {}
     const { gatewayIn, gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
@@ -419,7 +394,60 @@ export class Bridge {
       abi: l2Gateway7683Abi,
     })
 
-    return txHash
+    return {
+      orderCreatedTxHash: txHash,
+      orderFilledTxHash: "0xtodo",
+    }
+  }
+
+  async #monitorAztecToEvmOrder(order: Order, receipt: TxReceipt, callbacks?: OrderCallbacks): Promise<Hex> {
+    const { chainIn, chainOut } = order
+    const { onOrderFilled } = callbacks || {}
+    const { gatewayIn, gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
+
+    const { logs } = await this.#aztecNode!.getPublicLogs({
+      fromBlock: receipt.blockNumber! - 1,
+      toBlock: receipt.blockNumber! + 1,
+      contractAddress: AztecAddress.fromString(gatewayIn),
+    })
+    // TODO: handle multiple orders in the same tx
+    const [resolvedOrder] = getResolvedOrdersByLogs(logs)
+
+    const evmPublicClient = createPublicClient({
+      chain: chainOut as Chain,
+      transport: http(),
+    })
+    const waitForFilledOrder = async (orderId: Hex): Promise<Hex> => {
+      while (true) {
+        const result: any = await evmPublicClient.readContract({
+          address: gatewayOut,
+          abi: l2Gateway7683Abi,
+          functionName: "filledOrders",
+          args: [orderId],
+        })
+        if (result[0] !== "0x" && result[1] !== "0x") break
+        await sleep(5000)
+      }
+
+      const currentBlock = await evmPublicClient.getBlockNumber()
+      const [log] = await evmPublicClient.getLogs({
+        address: gatewayOut,
+        event: l2Gateway7683Abi.find((el) => el.type === "event" && el.name === "Filled") as AbiEvent,
+        args: {
+          orderId,
+        },
+        fromBlock: currentBlock - 100n,
+        toBlock: currentBlock,
+      })
+      return log.transactionHash
+    }
+    const orderFilledTxHash = await waitForFilledOrder(resolvedOrder.orderId)
+    onOrderFilled?.(orderFilledTxHash)
+    return orderFilledTxHash
+  }
+
+  async #monitorEvmToAztecOrder(order: Order, receipt: TxReceipt, callbacks?: OrderCallbacks): Promise<Hex> {
+    return "0x"
   }
 
   async #getAztecWallet() {

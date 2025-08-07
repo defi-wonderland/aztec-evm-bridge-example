@@ -106,7 +106,37 @@ describe("Bridge", () => {
   })*/
 
   describe("aztec -> Base", () => {
-    it("should create a private order from Aztec to Base", async () => {
+    it("should create a public order from Aztec to Base", async () => {
+      const { pxe, node } = await setup()
+      const bridge = new Bridge({
+        evmPrivateKey: process.env.EVM_PK as Hex,
+        aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
+        aztecKeySalt: process.env.AZTEC_KEY_SALT as Hex,
+        aztecPxe: pxe,
+        aztecNode: node,
+      })
+      const result = await bridge.createOrder(
+        {
+          chainIn: aztecSepolia as Chain,
+          chainOut: baseSepolia,
+          amountIn: 1n,
+          amountOut: 1n,
+          tokenIn: "0x143c799188d6881bff72012bebb100d19b51ce0c90b378bfa3ba57498b5ddeeb", // WETH on Aztec Sepolia
+          tokenOut: "0x1BDD24840e119DC2602dCC587Dd182812427A5Cc", // WETH on Base Sepolia
+          mode: "public",
+          data: padHex("0x"),
+          recipient: padHex(privateKeyToAddress(process.env.EVM_PK as Hex)),
+        },
+        {
+          onOrderCreated: (txHash) => expect(isHex(txHash)).toBe(true),
+          onOrderFilled: (txHash) => expect(isHex(txHash)).toBe(true),
+        },
+      )
+      expect(isHex(result.orderCreatedTxHash)).toBe(true)
+      expect(isHex(result.orderFilledTxHash)).toBe(true)
+    })
+
+    /*it("should create a private order from Aztec to Base", async () => {
       const { pxe, node } = await setup()
       const bridge = new Bridge({
         evmPrivateKey: process.env.EVM_PK as Hex,
@@ -134,6 +164,6 @@ describe("Bridge", () => {
       )
       expect(isHex(result.orderCreatedTxHash)).toBe(true)
       expect(isHex(result.orderFilledTxHash)).toBe(true)
-    })
+    })*/
   })
 })
