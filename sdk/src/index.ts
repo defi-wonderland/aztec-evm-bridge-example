@@ -251,10 +251,7 @@ export class Bridge {
     const { gatewayIn, gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
     const wallet = await this.#getAztecWallet()
 
-    await this.aztecPxe?.registerContract({
-      instance: (await this.aztecNode!.getContract(AztecAddress.fromString(gatewayIn)))!,
-      artifact: AztecGateway7683ContractArtifact,
-    })
+    await this.#maybeRegisterAztecGateway()
     await this.aztecPxe?.registerContract({
       instance: (await this.aztecNode!.getContract(AztecAddress.fromString(tokenIn)))!,
       artifact: TokenContractArtifact,
