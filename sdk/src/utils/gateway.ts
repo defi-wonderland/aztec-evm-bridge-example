@@ -7,6 +7,17 @@ export type FilledLog = {
   originData: `0x${string}`
 }
 
+export interface ParsedOpenLog {
+  user: `0x${string}`
+  originChainId: number
+  openDeadline: number
+  fillDeadline: number
+  orderId: `0x${string}`
+  maxSpent: Output[]
+  minReceived: Output[]
+  fillInstructions: FillInstruction[]
+}
+
 export type OrderStatus = "filledPrivately" | "filled"
 
 export interface Output {
@@ -22,18 +33,7 @@ export interface FillInstruction {
   destinationChainId: number
 }
 
-export interface ResolvedOrder {
-  user: `0x${string}`
-  originChainId: number
-  openDeadline: number
-  fillDeadline: number
-  orderId: `0x${string}`
-  maxSpent: Output[]
-  minReceived: Output[]
-  fillInstructions: FillInstruction[]
-}
-
-export const parseOpenLog = (fields1: Fr[], fields2: Fr[]) => {
+export const parseOpenLog = (fields1: Fr[], fields2: Fr[]): ParsedOpenLog => {
   let orderId1 = fields1[0]!.toString()
   const residualBytes1 = fields1[12]!.toString()
   const resolvedOrder1 =
@@ -81,15 +81,12 @@ export const parseOpenLog = (fields1: Fr[], fields2: Fr[]) => {
     residualBytes2.slice(20, 22) +
     fields2[9]!.toString().slice(4, 38)
 
-  orderId1 = "0x" + orderId1.slice(4) + residualBytes1.slice(4, 6)
-  orderId2 = "0x" + orderId2.slice(4) + residualBytes2.slice(4, 6)
+  orderId1 = `0x${orderId1.slice(4) + residualBytes1.slice(4, 6)}`
+  orderId2 = `0x${orderId2.slice(4) + residualBytes2.slice(4, 6)}`
 
   if (orderId1 !== orderId2) throw new Error("logs don't belong to the same order")
 
-  return {
-    orderId: orderId1,
-    resolvedOrder: resolvedOrder1 + resolvedOrder2,
-  }
+  return parseResolvedOrder((resolvedOrder1 + resolvedOrder2) as `0x${string}`)
 }
 
 export const parseFilledLog = (fields: Fr[]): FilledLog => {
@@ -128,7 +125,7 @@ export const parseFilledLog = (fields: Fr[]): FilledLog => {
   }
 }
 
-export const parseResolvedCrossChainOrder = (resolvedOrder: string): ResolvedOrder => {
+export const parseResolvedOrder = (resolvedOrder: string): ParsedOpenLog => {
   return {
     fillInstructions: [
       {
@@ -161,7 +158,7 @@ export const parseResolvedCrossChainOrder = (resolvedOrder: string): ResolvedOrd
   }
 }
 
-export const getResolvedOrdersByLogs = (logs: ExtendedPublicLog[]): ResolvedOrder[] => {
+export const getParsedOpenLogs = (logs: ExtendedPublicLog[]): ParsedOpenLog[] => {
   const groupedLogs = logs.reduce<Record<string, ExtendedPublicLog[]>>((acc, obj) => {
     const groupKey = obj.log.fields[0].toString()
     if (!acc[groupKey]) {
@@ -181,7 +178,7 @@ export const getResolvedOrdersByLogs = (logs: ExtendedPublicLog[]): ResolvedOrde
     .map((orderId) => {
       const [open1, open2] = groupedLogs[orderId]
       const open = parseOpenLog(open1.log.fields, open2.log.fields)
-      return parseResolvedCrossChainOrder(open.resolvedOrder)
+      return open
     })
 
   return joinedLogs

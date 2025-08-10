@@ -7,8 +7,9 @@ export const PRIVATE_ORDER = 1
 export const PUBLIC_ORDER_WITH_HOOK = 2
 export const PRIVATE_ORDER_WITH_HOOK = 3
 export const PRIVATE_SENDER = padHex("0x")
-export const FILLED_PRIVATELY = 3
+export const OPENED = 1
 export const FILLED = 2
+export const FILLED_PRIVATELY = 3
 
 export const aztecSepolia = {
   id: 999999,
