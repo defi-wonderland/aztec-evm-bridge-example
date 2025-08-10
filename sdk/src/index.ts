@@ -113,16 +113,17 @@ export class Bridge {
   }
 
   async forwardRefundOrder(details: RefundOrderDetails): Promise<Hex> {
-    const { chainIn } = details
+    const { chainIn, chainOut } = details
     if (chainIn.id === aztecSepolia.id) {
       return this.#forwardRefundOrderToL2(details)
+    } else if (chainOut.id === aztecSepolia.id) {
+      return this.#forwardRefundOrderToAztec(details)
     }
-    return this.#forwardRefundOrderToAztec(details)
+    throw new Error("Neither chain is Aztec")
   }
 
   async openOrder(order: Order, callbacks?: OrderCallbacks): Promise<OrderResult> {
     const { chainIn, chainOut, mode, data } = order
-
     if (chainIn.id === chainOut.id) throw new Error("Invalid chains: source and destination must differ")
 
     const validModes = ["private", "public", "privateWithHook", "publicWithHook"]
@@ -140,11 +141,13 @@ export class Bridge {
   }
 
   async refundOrder(details: RefundOrderDetails): Promise<Hex> {
-    const { chainIn } = details
+    const { chainIn, chainOut } = details
     if (chainIn.id === aztecSepolia.id) {
       return this.#refundAztecToEvmOrder(details)
+    } else if (chainOut.id === aztecSepolia.id) {
+      return this.#refundEvmToAztecOrder(details)
     }
-    return this.#refundEvmToAztecOrder(details)
+    throw new Error("Neither chain is Aztec")
   }
 
   async #aztecToEvmAzguard(order: Order, callbacks?: OrderCallbacks): Promise<OrderResult> {
