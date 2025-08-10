@@ -1,5 +1,6 @@
 import {
   AbiEvent,
+  bytesToHex,
   Chain,
   createClient,
   createPublicClient,
@@ -13,22 +14,25 @@ import {
   Log,
   padHex,
 } from "viem"
-import { AztecAddress, Fr, PXE, AztecNode, TxHash, sleep, TxReceipt } from "@aztec/aztec.js"
+import { AztecAddress, Fr, PXE, AztecNode, TxHash, sleep, TxReceipt, EthAddress } from "@aztec/aztec.js"
 import { AzguardClient } from "@azguardwallet/client"
 import { OkResult, SendTransactionResult, SimulateViewsResult } from "@azguardwallet/types"
 import { deriveSigningKey } from "@aztec/stdlib/keys"
 import { getSchnorrAccount, SchnorrAccountContractArtifact } from "@aztec/accounts/schnorr"
 import { TokenContract, TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
-import { poseidon2Hash } from "@aztec/foundation/crypto"
+import { poseidon2Hash, sha256ToField } from "@aztec/foundation/crypto"
 import { waitForTransactionReceipt } from "viem/actions"
 import { privateKeyToAccount } from "viem/accounts"
 import { SponsoredFPCContractArtifact } from "@aztec/noir-contracts.js/SponsoredFPC"
 
 import { OrderData, getAztecAddressFromAzguardAccount } from "./utils"
 import {
+  AZTEC_VERSION,
+  aztecRollupContractL1Addresses,
   aztecSepolia,
   FILLED,
   FILLED_PRIVATELY,
+  forwarderAddresses,
   gatewayAddresses,
   OPENED,
   ORDER_DATA_TYPE,
@@ -37,12 +41,15 @@ import {
   PRIVATE_SENDER,
   PUBLIC_ORDER,
   PUBLIC_ORDER_WITH_HOOK,
+  REFUND_ORDER_TYPE,
 } from "./constants"
 import {
   AztecGateway7683Contract,
   AztecGateway7683ContractArtifact,
 } from "./utils/artifacts/AztecGateway7683/AztecGateway7683"
 import l2Gateway7683Abi from "./utils/abi/l2Gateway7683"
+import rollupAbi from "./utils/abi/rollup"
+import forwarderAbi from "./utils/abi/forwarder"
 import { getSponsoredFPCInstance, getSponsporedFeePaymentMethod } from "./utils/fpc"
 import { FilledLog, getParsedOpenLogs, ParsedOpenLog, parseFilledLog } from "./utils/gateway"
 
@@ -65,10 +72,11 @@ interface Order {
   fillDeadline?: number
 }
 
-interface RefundOptions {
+interface RefundOrderDetails {
   orderId: Hex
   chainIn: Chain | { id: number; name: string }
   chainOut: Chain | { id: number; name: string }
+  chainForwarder?: Chain
 }
 
 interface OrderResult {
@@ -164,12 +172,20 @@ export class Bridge {
     }
   }
 
-  async refundOrder(options: RefundOptions): Promise<Hex> {
-    const { chainIn } = options
+  async forwardRefundOrder(details: RefundOrderDetails): Promise<Hex> {
+    const { chainIn } = details
     if (chainIn.id === aztecSepolia.id) {
-      return await this.#refundAztecToEvmOrder(options)
+      return this.#forwardRefundOrderToL2(details)
     }
-    return this.#refundEvmToAztecOrder(options)
+    return this.#forwardRefundOrderToAztec(details)
+  }
+
+  async refundOrder(details: RefundOrderDetails): Promise<Hex> {
+    const { chainIn } = details
+    if (chainIn.id === aztecSepolia.id) {
+      return this.#refundAztecToEvmOrder(details)
+    }
+    return this.#refundEvmToAztecOrder(details)
   }
 
   async #aztecToEvm(order: Order, callbacks?: OrderCallbacks): Promise<OrderResult> {
@@ -495,6 +511,97 @@ export class Bridge {
     }
   }
 
+  async #forwardRefundOrderToL2(details: RefundOrderDetails): Promise<Hex> {
+    const { orderId, chainIn, chainOut, chainForwarder } = details
+    if (!chainForwarder) throw new Error("You must specify a forwarder chain")
+    const { gatewayIn } = this.#getGatewaysByChains(chainIn, chainOut)
+    const rollupAddress = aztecRollupContractL1Addresses[chainForwarder.id]
+    const forwarderAddress = forwarderAddresses[chainForwarder.id]
+    if (!rollupAddress || forwarderAddress) throw new Error("Forwarder chain not supported")
+
+    const message = [Buffer.from(REFUND_ORDER_TYPE.slice(2), "hex"), Buffer.from(orderId.slice(2), "hex")]
+    const messageHash = sha256ToField(message)
+    const l2ToL1Message = sha256ToField([
+      Buffer.from(gatewayIn, "hex"),
+      new Fr(AZTEC_VERSION).toBuffer(),
+      EthAddress.fromString(forwarderAddress).toBuffer32(),
+      new Fr(chainForwarder.id).toBuffer(),
+      messageHash.toBuffer(),
+    ])
+
+    await this.#maybeRegisterAztecGateway()
+    const getOrderSettlementBlockNumber = async (): Promise<bigint> => {
+      if (this.azguardClient) {
+        const selectedAccount = this.azguardClient.accounts[0]
+        const [response] = await this.azguardClient!.execute([
+          {
+            kind: "simulate_views",
+            account: selectedAccount,
+            calls: [
+              {
+                kind: "call",
+                contract: gatewayIn,
+                method: "get_order_settlement_block_number",
+                args: [orderId],
+              },
+            ],
+          },
+        ])
+        if (response.status === "failed") throw new Error(response.error)
+        return BigInt((response as OkResult<SimulateViewsResult>).result.encoded[0][0])
+      }
+
+      const wallet = await this.#getAztecWallet()
+      const gateway = await AztecGateway7683Contract.at(AztecAddress.fromString(gatewayIn), wallet)
+      return (await gateway.methods
+        .get_order_settlement_block_number(Fr.fromBufferReduce(Buffer.from(orderId.slice(2), "hex")))
+        .simulate()) as bigint
+    }
+
+    const orderSettlementBlockNumber = await getOrderSettlementBlockNumber()
+    const provenBlockNumber = (await createPublicClient({
+      chain: chainForwarder,
+      transport: http(),
+    }).readContract({
+      address: aztecRollupContractL1Addresses[chainForwarder.id],
+      args: [],
+      abi: rollupAbi,
+      functionName: "getProvenBlockNumber",
+    })) as bigint
+    if (orderSettlementBlockNumber > provenBlockNumber) {
+      throw new Error(
+        `cannot forward settlement to L2 for order ${orderId} because the corresponding block number ${orderSettlementBlockNumber} is > than the last proven ${provenBlockNumber}!`,
+      )
+    }
+
+    const [l2ToL1MessageIndex, siblingPath] = await this.aztecPxe!.getL2ToL1MembershipWitness(
+      parseInt(orderSettlementBlockNumber.toString()),
+      l2ToL1Message,
+    )
+
+    const { walletClient, address } = await this.#getEvmWalletClientAndAddress(chainForwarder)
+    const forwardSettleTxHash = await walletClient.writeContract({
+      abi: forwarderAbi,
+      account: this.evmPrivateKey ? walletClient.account! : address,
+      address: forwarderAddress,
+      args: [
+        [[gatewayIn, AZTEC_VERSION], [forwarderAddress, chainForwarder.id], messageHash.toString()],
+        bytesToHex(Buffer.concat([...message])),
+        orderSettlementBlockNumber,
+        l2ToL1MessageIndex,
+        siblingPath.toBufferArray().map((buff) => "0x" + buff.toString("hex")),
+      ],
+      chain: chainForwarder,
+      functionName: "forwardSettleToL2",
+    })
+
+    return forwardSettleTxHash
+  }
+
+  async #forwardRefundOrderToAztec(details: RefundOrderDetails): Promise<Hex> {
+    throw new Error("Not implemented")
+  }
+
   async #monitorAztecToEvmOrder(order: Order, receipt: TxReceipt, callbacks?: OrderCallbacks): Promise<Hex> {
     const { chainIn, chainOut } = order
     const { onOrderOpened, onOrderFilled } = callbacks || {}
@@ -727,8 +834,8 @@ export class Bridge {
     }
   }
 
-  async #refundAztecToEvmOrder(options: RefundOptions): Promise<Hex> {
-    const { orderId, chainIn, chainOut } = options
+  async #refundAztecToEvmOrder(details: RefundOrderDetails): Promise<Hex> {
+    const { orderId, chainIn, chainOut } = details
 
     const { gatewayIn, gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
 
@@ -784,8 +891,8 @@ export class Bridge {
     return txHash
   }
 
-  async #refundEvmToAztecOrder(options: RefundOptions): Promise<Hex> {
-    const { orderId, chainIn, chainOut } = options
+  async #refundEvmToAztecOrder(details: RefundOrderDetails): Promise<Hex> {
+    const { orderId, chainIn, chainOut } = details
     const { gatewayIn, gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
 
     const order: any = await createPublicClient({
