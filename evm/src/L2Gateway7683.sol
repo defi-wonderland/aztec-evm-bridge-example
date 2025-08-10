@@ -12,7 +12,7 @@ contract L2Gateway7683 is IL2Gateway7683, BasicSwap7683, Ownable {
 
     uint32 public constant AZTEC_CHAIN_ID = 999999;
     uint256 private constant FORWARDER_SETTLED_ORDERS_SLOT = 2;
-    uint256 private constant FORWARDER_REFUNED_ORDERS_SLOT = 3;
+    uint256 private constant FORWARDER_REFUNDED_ORDERS_SLOT = 3;
     bytes32 private constant SETTLE_ORDER_TYPE = sha256(abi.encodePacked("SETTLE_ORDER_TYPE"));
     bytes32 private constant REFUND_ORDER_TYPE = sha256(abi.encodePacked("REFUND_ORDER_TYPE"));
     address public forwarder;
@@ -48,7 +48,7 @@ contract L2Gateway7683 is IL2Gateway7683, BasicSwap7683, Ownable {
         // NOTE: At this point, I need to check if the order has been filled by reading the corresponding mapping inside the Forwarder.
         // When a solver fills the intent, a message is sent via the Portal from Aztec to Ethereum, reaching the Forwarder.
         // The data stored in the _refundedOrders mapping must contain the necessary (and compatible) information required to call _handleRefundOrder.
-        _verifyForwarderProof(message, stateProofParams, accountProofParams, FORWARDER_REFUNED_ORDERS_SLOT);
+        _verifyForwarderProof(message, stateProofParams, accountProofParams, FORWARDER_REFUNDED_ORDERS_SLOT);
         bytes32 orderType = message.readBytes32(0);
         bytes32 orderId = message.readBytes32(32);
         require(orderType == REFUND_ORDER_TYPE, InvalidOrderType(orderId));
