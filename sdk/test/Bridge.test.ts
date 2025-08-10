@@ -138,7 +138,7 @@ describe("Bridge", () => {
       })
       let onOrderOpenedCalled = false
       let onOrderFilledCalled = false
-      const result = await bridge.createOrder(
+      const result = await bridge.openOrder(
         {
           chainIn: aztecSepolia as Chain,
           chainOut: baseSepolia,
@@ -174,7 +174,7 @@ describe("Bridge", () => {
         aztecPxe,
         aztecNode,
       })
-      const result = await bridge.createOrder(
+      const result = await bridge.openOrder(
         {
           chainIn: aztecSepolia as Chain,
           chainOut: baseSepolia,
@@ -194,6 +194,7 @@ describe("Bridge", () => {
       expect(isHex(result.orderOpenedTxHash)).toBe(true)
       expect(isHex(result.orderFilledTxHash)).toBe(true)
     })
+
     it("should be able to open a private order from Aztec to Base and then ask for a refund", async () => {
       const { aztecPxe, aztecNode } = await setup()
       const bridge = new Bridge({
@@ -203,9 +204,9 @@ describe("Bridge", () => {
         aztecPxe,
         aztecNode,
       })
-      const createOrder = (): Promise<Hex> =>
+      const openOrder = (): Promise<Hex> =>
         new Promise(async (resolve) => {
-          bridge.createOrder(
+          bridge.openOrder(
             {
               chainIn: aztecSepolia as Chain,
               chainOut: baseSepolia,
@@ -216,14 +217,14 @@ describe("Bridge", () => {
               mode: "private", // or public,
               data: padHex("0x"),
               recipient: padHex(privateKeyToAddress(process.env.EVM_PK as Hex)),
-              fillDeadline: 1,
+              fillDeadline: 10,
             },
             {
-              onOrderOpened: (orderId) => resolve(orderId),
+              onOrderOpened: ({ orderId }) => resolve(orderId),
             },
           )
         })
-      const orderId = await createOrder()
+      const orderId = await openOrder()
       const txHash = await bridge.refundOrder({
         orderId,
         chainIn: aztecSepolia as Chain,
@@ -253,7 +254,7 @@ describe("Bridge", () => {
       let onOrderFilledCalled = false
       let onSecretCalled = false
       let onOrderClaimedCalled = false
-      const result = await bridge.createOrder(
+      const result = await bridge.openOrder(
         {
           chainIn: baseSepolia,
           chainOut: aztecSepolia as Chain,
@@ -300,7 +301,7 @@ describe("Bridge", () => {
 
       let onOrderOpenedCalled = false
       let onOrderFilledCalled = false
-      const result = await bridge.createOrder(
+      const result = await bridge.openOrder(
         {
           chainIn: baseSepolia,
           chainOut: aztecSepolia as Chain,
@@ -341,9 +342,9 @@ describe("Bridge", () => {
         artifact: TokenContractArtifact,
       })
 
-      const createOrder = (): Promise<Hex> =>
+      const openOrder = (): Promise<Hex> =>
         new Promise(async (resolve) => {
-          bridge.createOrder(
+          bridge.openOrder(
             {
               chainIn: baseSepolia,
               chainOut: aztecSepolia as Chain,
@@ -354,14 +355,14 @@ describe("Bridge", () => {
               mode: "private", // or public,
               data: padHex("0x"),
               recipient: padHex(privateKeyToAddress(process.env.EVM_PK as Hex)),
-              fillDeadline: 1,
+              fillDeadline: 10,
             },
             {
-              onOrderOpened: (orderId) => resolve(orderId),
+              onOrderOpened: ({ orderId }) => resolve(orderId),
             },
           )
         })
-      const orderId = await createOrder()
+      const orderId = await openOrder()
       const txHash = await bridge.refundOrder({
         orderId,
         chainIn: baseSepolia,

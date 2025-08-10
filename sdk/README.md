@@ -17,7 +17,7 @@ npm install @substancelabs/aztec-evm-bridge-sdk
 
 ## 🚀 Quick Start
 
-Here's a basic example showing how to initiate a createOrder **from Aztec to Base**:
+Here's a basic example showing how to initiate a openOrder **from Aztec to Base**:
 
 ```ts
 import { Bridge, aztecSepolia } from "@substancelabs/aztec-evm-bridge-sdk"
@@ -52,7 +52,7 @@ const bridge = new Bridge({
   aztecNode: node,
 })
 bridge
-  .createOrder({
+  .openOrder({
     chainIn: aztecSepolia as Chain,
     chainOut: baseSepolia,
     amountIn: 1n,

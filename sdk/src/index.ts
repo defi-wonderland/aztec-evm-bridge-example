@@ -11,7 +11,6 @@ import {
   Hex,
   hexToBytes,
   http,
-  Log,
   padHex,
 } from "viem"
 import { AztecAddress, Fr, PXE, AztecNode, TxHash, sleep, TxReceipt, EthAddress } from "@aztec/aztec.js"
@@ -51,57 +50,17 @@ import l2Gateway7683Abi from "./utils/abi/l2Gateway7683"
 import rollupAbi from "./utils/abi/rollup"
 import forwarderAbi from "./utils/abi/forwarder"
 import { getSponsoredFPCInstance, getSponsporedFeePaymentMethod } from "./utils/fpc"
-import { FilledLog, getParsedOpenLogs, ParsedOpenLog, parseFilledLog } from "./utils/gateway"
+import { getResolvedOrderAndOrderIdEvmByReceipt, getResolvedOrderByAztecLogs, parseFilledLog } from "./utils/gateway"
 
-type SwapMode = "private" | "public" | "privateWithHook" | "publicWithHook"
-
-type LogWithTopics = Log & {
-  topics: string[]
-}
-
-interface Order {
-  chainIn: Chain | { id: number; name: string }
-  chainOut: Chain | { id: number; name: string }
-  amountIn: bigint
-  amountOut: bigint
-  tokenIn: Hex
-  tokenOut: Hex
-  recipient: Hex
-  mode: SwapMode
-  data: Hex
-  fillDeadline?: number
-}
-
-interface RefundOrderDetails {
-  orderId: Hex
-  chainIn: Chain | { id: number; name: string }
-  chainOut: Chain | { id: number; name: string }
-  chainForwarder?: Chain
-}
-
-interface OrderResult {
-  orderOpenedTxHash: Hex
-  // NOTE: on aztec we cannot get the filled transaction hash where a given log has been emitted
-  orderFilledTxHash?: Hex
-  orderClaimedTxHash?: Hex
-}
-
-interface OrderCallbacks {
-  onSecret?: (orderId: Hex, secret: Hex) => void
-  onOrderOpened?: (orderId: Hex, txHash: Hex) => void
-  onOrderFilled?: (orderId: Hex, txHash?: Hex) => void
-  onOrderClaimed?: (orderId: Hex, txHash: Hex) => void
-}
-
-interface BridgeConfigs {
-  azguardClient?: AzguardClient
-  aztecNode: AztecNode
-  aztecPxe?: PXE
-  aztecKeySalt?: Hex
-  aztecSecretKey?: Hex
-  evmPrivateKey?: Hex
-  evmProvider?: any
-}
+import type {
+  BridgeConfigs,
+  FilledLog,
+  Order,
+  OrderCallbacks,
+  OrderResult,
+  RefundOrderDetails,
+  ResolvedOrder,
+} from "./types"
 
 export class Bridge {
   azguardClient?: AzguardClient
@@ -153,7 +112,15 @@ export class Bridge {
     return this.#claimEvmToAztecPrivateOrderDefault(orderId, secret)
   }
 
-  async createOrder(order: Order, callbacks?: OrderCallbacks): Promise<OrderResult> {
+  async forwardRefundOrder(details: RefundOrderDetails): Promise<Hex> {
+    const { chainIn } = details
+    if (chainIn.id === aztecSepolia.id) {
+      return this.#forwardRefundOrderToL2(details)
+    }
+    return this.#forwardRefundOrderToAztec(details)
+  }
+
+  async openOrder(order: Order, callbacks?: OrderCallbacks): Promise<OrderResult> {
     const { chainIn, chainOut, mode, data } = order
 
     if (chainIn.id === chainOut.id) throw new Error("Invalid chains: source and destination must differ")
@@ -164,20 +131,12 @@ export class Bridge {
     if (data.length !== 66) throw new Error("Invalid data: must be 32 bytes")
 
     if (chainIn.id === aztecSepolia.id) {
-      return this.#createAztecToEvmOrder(order, callbacks)
+      return this.#openAztecToEvmOrder(order, callbacks)
     } else if (chainOut.id === aztecSepolia.id) {
-      return this.#createEvmToAztecOrder(order, callbacks)
+      return this.#openEvmToAztecOrder(order, callbacks)
     } else {
       throw new Error("Neither chain is Aztec")
     }
-  }
-
-  async forwardRefundOrder(details: RefundOrderDetails): Promise<Hex> {
-    const { chainIn } = details
-    if (chainIn.id === aztecSepolia.id) {
-      return this.#forwardRefundOrderToL2(details)
-    }
-    return this.#forwardRefundOrderToAztec(details)
   }
 
   async refundOrder(details: RefundOrderDetails): Promise<Hex> {
@@ -186,11 +145,6 @@ export class Bridge {
       return this.#refundAztecToEvmOrder(details)
     }
     return this.#refundEvmToAztecOrder(details)
-  }
-
-  async #createAztecToEvmOrder(order: Order, callbacks?: OrderCallbacks): Promise<OrderResult> {
-    if (this.azguardClient) return this.#aztecToEvmAzguard(order, callbacks)
-    return this.#aztecToEvmDefault(order, callbacks)
   }
 
   async #aztecToEvmAzguard(order: Order, callbacks?: OrderCallbacks): Promise<OrderResult> {
@@ -266,11 +220,16 @@ export class Bridge {
       }
     }
     const orderCreatedReceipt = await waitForReceipt(orderOpenedTxHash)
+    const { transactionHash: orderFilledTxHash, resolvedOrder } = await this.#monitorAztecToEvmOrder(
+      order,
+      orderCreatedReceipt,
+      callbacks,
+    )
 
-    const orderFilledTxHash = await this.#monitorAztecToEvmOrder(order, orderCreatedReceipt, callbacks)
     return {
       orderOpenedTxHash,
       orderFilledTxHash,
+      resolvedOrder,
     }
   }
 
@@ -353,10 +312,15 @@ export class Bridge {
         timeout: 120000,
       })
 
-    const orderFilledTxHash = await this.#monitorAztecToEvmOrder(order, receipt, callbacks)
+    const { transactionHash: orderFilledTxHash, resolvedOrder } = await this.#monitorAztecToEvmOrder(
+      order,
+      receipt,
+      callbacks,
+    )
     return {
       orderOpenedTxHash: receipt.txHash.toString(),
       orderFilledTxHash,
+      resolvedOrder,
     }
   }
 
@@ -418,97 +382,6 @@ export class Bridge {
       })
 
     return receipt.txHash.toString()
-  }
-
-  async #createEvmToAztecOrder(order: Order, callbacks?: OrderCallbacks): Promise<OrderResult> {
-    const { amountIn, amountOut, chainIn, chainOut, data, mode, recipient, tokenIn, tokenOut } = order
-    const { onSecret, onOrderOpened, onOrderClaimed } = callbacks || {}
-    const { gatewayIn, gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
-
-    const fillDeadline = order.fillDeadline ?? 2 ** 32 - 1
-    const nonce = Fr.random()
-    const isPrivate = mode.includes("private")
-    const secret = isPrivate ? Fr.random() : null
-    const { walletClient, address: sender } = await this.#getEvmWalletClientAndAddress(chainIn as Chain)
-
-    const orderData = new OrderData({
-      sender: padHex(sender),
-      recipient: secret ? (await poseidon2Hash([secret])).toString() : padHex(recipient),
-      inputToken: padHex(tokenIn),
-      outputToken: padHex(tokenOut),
-      amountIn,
-      amountOut,
-      senderNonce: nonce.toBigInt(),
-      originDomain: chainIn.id,
-      destinationDomain: chainOut.id,
-      destinationSettler: padHex(gatewayOut),
-      fillDeadline,
-      orderType: isPrivate ? PRIVATE_ORDER : PUBLIC_ORDER,
-      data: data || padHex("0x"),
-    })
-
-    const evmClient = createClient({
-      chain: chainIn as Chain,
-      transport: http(),
-    })
-    const evmPublicClient = createPublicClient({
-      chain: chainIn as Chain,
-      transport: http(),
-    })
-
-    const accountNonce = await evmPublicClient.getTransactionCount({
-      address: walletClient.account!.address,
-    })
-    let txHash = await walletClient.writeContract({
-      abi: erc20Abi,
-      account: this.evmPrivateKey ? walletClient.account! : sender,
-      address: tokenIn,
-      args: [gatewayIn, amountIn],
-      chain: chainIn as Chain,
-      functionName: "approve",
-      nonce: accountNonce,
-    })
-    await waitForTransactionReceipt(evmClient, { hash: txHash })
-    txHash = await walletClient.writeContract({
-      abi: l2Gateway7683Abi,
-      account: this.evmPrivateKey ? walletClient.account! : sender,
-      address: gatewayIn,
-      args: [
-        {
-          fillDeadline,
-          orderData: orderData.encode(),
-          orderDataType: ORDER_DATA_TYPE,
-        },
-      ],
-      chain: chainIn as Chain,
-      functionName: "open",
-      nonce: accountNonce + 1,
-    })
-    const receipt = await waitForTransactionReceipt(evmClient, { hash: txHash! })
-
-    const log = (receipt.logs as LogWithTopics[]).find(
-      ({ topics }) => topics[0] === "0x3448bbc2203c608599ad448eeb1007cea04b788ac631f9f558e8dd01a3c27b3d", // Open
-    )
-    const orderId = Fr.fromBufferReduce(Buffer.from(log!.topics[1].slice(2), "hex")).toString()
-
-    if (secret) onSecret?.(orderId, secret.toString())
-    onOrderOpened?.(orderId, txHash)
-
-    await this.#monitorEvmToAztecOrder(order, orderId, callbacks)
-
-    // NOTE: if private
-    if (secret) {
-      const orderClaimedTxHash = await this.claimEvmToAztecPrivateOrder(orderId, secret.toString())
-      onOrderClaimed?.(orderId, orderClaimedTxHash)
-      return {
-        orderOpenedTxHash: txHash!,
-        orderClaimedTxHash,
-      }
-    }
-
-    return {
-      orderOpenedTxHash: txHash!,
-    }
   }
 
   async #forwardRefundOrderToL2(details: RefundOrderDetails): Promise<Hex> {
@@ -692,18 +565,22 @@ export class Bridge {
     return parsedLogs.find((log) => log.orderId === orderId)
   }
 
-  async #getAztecOpenLogByOrderId(orderId: Hex): Promise<ParsedOpenLog | undefined> {
+  async #getAztecOpenLogByOrderId(orderId: Hex): Promise<ResolvedOrder | undefined> {
     // TODO: understand why if i use fromBlock and toBlock i always receive the penultimante log.
     // Basically i never receive the last one even if block numbers are up to date
     const gateway = gatewayAddresses[aztecSepolia.id]
     const { logs } = await this.aztecNode.getPublicLogs({
       contractAddress: AztecAddress.fromString(gateway),
     })
-    const parsedOpenLogs = getParsedOpenLogs(logs)
+    const parsedOpenLogs = getResolvedOrderByAztecLogs(logs)
     return parsedOpenLogs.find((order) => order.orderId === orderId)
   }
 
-  async #monitorAztecToEvmOrder(order: Order, receipt: TxReceipt, callbacks?: OrderCallbacks): Promise<Hex> {
+  async #monitorAztecToEvmOrder(
+    order: Order,
+    receipt: TxReceipt,
+    callbacks?: OrderCallbacks,
+  ): Promise<{ transactionHash: Hex; resolvedOrder: ResolvedOrder }> {
     const { chainIn, chainOut } = order
     const { onOrderOpened, onOrderFilled } = callbacks || {}
     const { gatewayIn, gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
@@ -714,8 +591,8 @@ export class Bridge {
       contractAddress: AztecAddress.fromString(gatewayIn),
     })
     // TODO: handle multiple orders in the same tx
-    const [resolvedOrder] = getParsedOpenLogs(logs)
-    onOrderOpened?.(resolvedOrder.orderId, receipt.txHash.toString())
+    const [resolvedOrder] = getResolvedOrderByAztecLogs(logs)
+    onOrderOpened?.({ orderId: resolvedOrder.orderId, transactionHash: receipt.txHash.toString(), resolvedOrder })
 
     const evmPublicClient = createPublicClient({
       chain: chainOut as Chain,
@@ -746,8 +623,8 @@ export class Bridge {
       return log.transactionHash
     }
     const orderFilledTxHash = await waitForFilledOrder(resolvedOrder.orderId)
-    onOrderFilled?.(resolvedOrder.orderId, orderFilledTxHash)
-    return orderFilledTxHash
+    onOrderFilled?.({ orderId: resolvedOrder.orderId, transactionHash: orderFilledTxHash })
+    return { transactionHash: orderFilledTxHash, resolvedOrder }
   }
 
   async #monitorEvmToAztecOrder(order: Order, orderId: Hex, callbacks?: OrderCallbacks) {
@@ -786,7 +663,7 @@ export class Bridge {
       if (response.status === "failed") throw new Error(response.error)
       const status = parseInt(BigInt((response as OkResult<SimulateViewsResult>).result.encoded[0][0]).toString())
       if (status === FILLED_PRIVATELY || status === FILLED) {
-        onOrderFilled?.(orderId)
+        onOrderFilled?.({ orderId })
         return
       }
       await sleep(3000)
@@ -805,7 +682,7 @@ export class Bridge {
       const gateway = await AztecGateway7683Contract.at(AztecAddress.fromString(gatewayOut), wallet)
       const status = parseInt(await gateway.methods.get_order_status(Fr.fromString(orderId)).simulate())
       if (status === FILLED_PRIVATELY || status === FILLED) {
-        onOrderFilled?.(orderId)
+        onOrderFilled?.({ orderId })
         return
       }
       await sleep(3000)
@@ -831,6 +708,108 @@ export class Bridge {
         })
       }
       this.#aztecGatewayRegistered = true
+    }
+  }
+
+  async #openAztecToEvmOrder(order: Order, callbacks?: OrderCallbacks): Promise<OrderResult> {
+    if (this.azguardClient) return this.#aztecToEvmAzguard(order, callbacks)
+    return this.#aztecToEvmDefault(order, callbacks)
+  }
+
+  async #openEvmToAztecOrder(order: Order, callbacks?: OrderCallbacks): Promise<OrderResult> {
+    const { amountIn, amountOut, chainIn, chainOut, data, mode, recipient, tokenIn, tokenOut } = order
+    const { onSecret, onOrderOpened, onOrderClaimed } = callbacks || {}
+    const { gatewayIn, gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
+
+    const fillDeadline = order.fillDeadline ?? 2 ** 32 - 1
+    const nonce = Fr.random()
+    const isPrivate = mode.includes("private")
+    const secret = isPrivate ? Fr.random() : null
+    const { walletClient, address: sender } = await this.#getEvmWalletClientAndAddress(chainIn as Chain)
+
+    const orderData = new OrderData({
+      sender: padHex(sender),
+      recipient: secret ? (await poseidon2Hash([secret])).toString() : padHex(recipient),
+      inputToken: padHex(tokenIn),
+      outputToken: padHex(tokenOut),
+      amountIn,
+      amountOut,
+      senderNonce: nonce.toBigInt(),
+      originDomain: chainIn.id,
+      destinationDomain: chainOut.id,
+      destinationSettler: padHex(gatewayOut),
+      fillDeadline,
+      orderType: isPrivate ? PRIVATE_ORDER : PUBLIC_ORDER,
+      data: data || padHex("0x"),
+    })
+
+    const evmClient = createClient({
+      chain: chainIn as Chain,
+      transport: http(),
+    })
+    const evmPublicClient = createPublicClient({
+      chain: chainIn as Chain,
+      transport: http(),
+    })
+
+    const accountNonce = await evmPublicClient.getTransactionCount({
+      address: walletClient.account!.address,
+    })
+    let txHash = await walletClient.writeContract({
+      abi: erc20Abi,
+      account: this.evmPrivateKey ? walletClient.account! : sender,
+      address: tokenIn,
+      args: [gatewayIn, amountIn],
+      chain: chainIn as Chain,
+      functionName: "approve",
+      nonce: accountNonce,
+    })
+    await waitForTransactionReceipt(evmClient, { hash: txHash })
+    txHash = await walletClient.writeContract({
+      abi: l2Gateway7683Abi,
+      account: this.evmPrivateKey ? walletClient.account! : sender,
+      address: gatewayIn,
+      args: [
+        {
+          fillDeadline,
+          orderData: orderData.encode(),
+          orderDataType: ORDER_DATA_TYPE,
+        },
+      ],
+      chain: chainIn as Chain,
+      functionName: "open",
+      nonce: accountNonce + 1,
+    })
+    const receipt = await waitForTransactionReceipt(evmClient, { hash: txHash! })
+    const { orderId, resolvedOrder } = getResolvedOrderAndOrderIdEvmByReceipt(receipt)
+
+    if (secret)
+      onSecret?.({
+        orderId,
+        secret: secret.toString(),
+      })
+    onOrderOpened?.({
+      orderId,
+      resolvedOrder,
+      transactionHash: txHash,
+    })
+
+    await this.#monitorEvmToAztecOrder(order, orderId, callbacks)
+
+    // NOTE: if private
+    if (secret) {
+      const orderClaimedTxHash = await this.claimEvmToAztecPrivateOrder(orderId, secret.toString())
+      onOrderClaimed?.({ orderId, transactionHash: orderClaimedTxHash })
+      return {
+        orderOpenedTxHash: txHash!,
+        orderClaimedTxHash,
+        resolvedOrder,
+      }
+    }
+
+    return {
+      orderOpenedTxHash: txHash!,
+      resolvedOrder,
     }
   }
 

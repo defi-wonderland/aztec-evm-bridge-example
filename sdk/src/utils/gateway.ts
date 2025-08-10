@@ -1,39 +1,16 @@
-import type { Fr } from "@aztec/aztec.js"
+import { decodeAbiParameters, Hex, Log, TransactionReceipt } from "viem"
+import { Fr } from "@aztec/aztec.js"
+
+import l2Gateway7683Abi from "./abi/l2Gateway7683"
+
+import type { FilledLog, ResolvedOrder } from "../types"
 import type { ExtendedPublicLog, PublicLog } from "@aztec/stdlib/logs"
 
-export type FilledLog = {
-  orderId: `0x${string}`
-  fillerData: `0x${string}`
-  originData: `0x${string}`
+export type LogWithTopics = Log & {
+  topics: string[]
 }
 
-export interface ParsedOpenLog {
-  user: `0x${string}`
-  originChainId: number
-  openDeadline: number
-  fillDeadline: number
-  orderId: `0x${string}`
-  maxSpent: Output[]
-  minReceived: Output[]
-  fillInstructions: FillInstruction[]
-}
-
-export type OrderStatus = "filledPrivately" | "filled"
-
-export interface Output {
-  token: `0x${string}`
-  recipient: `0x${string}`
-  chainId: number
-  amount: bigint
-}
-
-export interface FillInstruction {
-  destinationSettler: `0x${string}`
-  originData: `0x${string}`
-  destinationChainId: number
-}
-
-export const parseOpenLog = (fields1: Fr[], fields2: Fr[]): ParsedOpenLog => {
+export const parseResolvedOrderFromOpen1AndOpen2Logs = (fields1: Fr[], fields2: Fr[]): ResolvedOrder => {
   let orderId1 = fields1[0]!.toString()
   const residualBytes1 = fields1[12]!.toString()
   const resolvedOrder1 =
@@ -86,7 +63,7 @@ export const parseOpenLog = (fields1: Fr[], fields2: Fr[]): ParsedOpenLog => {
 
   if (orderId1 !== orderId2) throw new Error("logs don't belong to the same order")
 
-  return parseResolvedOrder((resolvedOrder1 + resolvedOrder2) as `0x${string}`)
+  return parseResolvedAztecOrder((resolvedOrder1 + resolvedOrder2) as `0x${string}`)
 }
 
 export const parseFilledLog = (fields: Fr[]): FilledLog => {
@@ -125,7 +102,7 @@ export const parseFilledLog = (fields: Fr[]): FilledLog => {
   }
 }
 
-export const parseResolvedOrder = (resolvedOrder: string): ParsedOpenLog => {
+export const parseResolvedAztecOrder = (resolvedOrder: string): ResolvedOrder => {
   return {
     fillInstructions: [
       {
@@ -158,7 +135,29 @@ export const parseResolvedOrder = (resolvedOrder: string): ParsedOpenLog => {
   }
 }
 
-export const getParsedOpenLogs = (logs: ExtendedPublicLog[]): ParsedOpenLog[] => {
+export const getResolvedOrderAndOrderIdEvmByReceipt = (
+  receipt: TransactionReceipt,
+): { orderId: Hex; resolvedOrder: ResolvedOrder } => {
+  const log = (receipt.logs as LogWithTopics[]).find(
+    ({ topics }) => topics[0] === "0x3448bbc2203c608599ad448eeb1007cea04b788ac631f9f558e8dd01a3c27b3d", // Open
+  )
+  const orderId = Fr.fromBufferReduce(Buffer.from(log!.topics[1].slice(2), "hex")).toString()
+  const resolvedOrder = parseResolvedOrderEvm(log!)
+  return {
+    orderId,
+    resolvedOrder,
+  }
+}
+
+export const parseResolvedOrderEvm = (log: Log): ResolvedOrder => {
+  const [resolvedOrder] = decodeAbiParameters(
+    [l2Gateway7683Abi.find((el) => el.name === "Open")?.inputs[1] as any],
+    log.data,
+  ) as [ResolvedOrder]
+  return resolvedOrder
+}
+
+export const getResolvedOrderByAztecLogs = (logs: ExtendedPublicLog[]): ResolvedOrder[] => {
   const groupedLogs = logs.reduce<Record<string, ExtendedPublicLog[]>>((acc, obj) => {
     const groupKey = obj.log.fields[0].toString()
     if (!acc[groupKey]) {
@@ -177,7 +176,7 @@ export const getParsedOpenLogs = (logs: ExtendedPublicLog[]): ParsedOpenLog[] =>
     })
     .map((orderId) => {
       const [open1, open2] = groupedLogs[orderId]
-      const open = parseOpenLog(open1.log.fields, open2.log.fields)
+      const open = parseResolvedOrderFromOpen1AndOpen2Logs(open1.log.fields, open2.log.fields)
       return open
     })
 
