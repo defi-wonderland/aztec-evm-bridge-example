@@ -36,6 +36,7 @@
     "@aztec/noir-contracts.js": "1.1.3",
     "@aztec/pxe": "1.1.3",
     "@aztec/stdlib": "1.1.3",
+    "@lodestar/types": "^1.33.0",
     "viem": "^2.33.2"
   }
 }

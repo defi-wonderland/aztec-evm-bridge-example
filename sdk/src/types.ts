@@ -75,6 +75,7 @@ export interface BridgeConfigs {
   aztecPxe?: PXE
   aztecKeySalt?: Hex
   aztecSecretKey?: Hex
+  beaconApiUrl: string
   evmPrivateKey?: Hex
   evmProvider?: any
 }

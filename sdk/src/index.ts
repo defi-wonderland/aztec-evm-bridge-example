@@ -7,10 +7,12 @@ import {
   createWalletClient,
   custom,
   decodeAbiParameters,
+  encodeAbiParameters,
   erc20Abi,
   Hex,
   hexToBytes,
   http,
+  keccak256,
   padHex,
 } from "viem"
 import { AztecAddress, Fr, PXE, AztecNode, TxHash, sleep, TxReceipt, EthAddress } from "@aztec/aztec.js"
@@ -23,14 +25,26 @@ import { poseidon2Hash, sha256ToField } from "@aztec/foundation/crypto"
 import { waitForTransactionReceipt } from "viem/actions"
 import { privateKeyToAccount } from "viem/accounts"
 import { SponsoredFPCContractArtifact } from "@aztec/noir-contracts.js/SponsoredFPC"
+const { ssz } = await import("@lodestar/types")
+const { SignedBeaconBlock } = ssz.electra
 
-import { OrderData, getAztecAddressFromAzguardAccount } from "./utils"
+import {
+  getAztecAddressFromAzguardAccount,
+  getExecutionStateRootProof,
+  getResolvedOrderAndOrderIdEvmByReceipt,
+  getResolvedOrderByAztecLogs,
+  getSponsoredFPCInstance,
+  getSponsporedFeePaymentMethod,
+  OrderData,
+  parseFilledLog,
+} from "./utils"
 import {
   AZTEC_VERSION,
   aztecRollupContractL1Addresses,
   aztecSepolia,
   FILLED,
   FILLED_PRIVATELY,
+  FORWARDER_REFUNDED_ORDERS_SLOT,
   forwarderAddresses,
   gatewayAddresses,
   OPENED,
@@ -49,8 +63,6 @@ import {
 import l2Gateway7683Abi from "./utils/abi/l2Gateway7683"
 import rollupAbi from "./utils/abi/rollup"
 import forwarderAbi from "./utils/abi/forwarder"
-import { getSponsoredFPCInstance, getSponsporedFeePaymentMethod } from "./utils/fpc"
-import { getResolvedOrderAndOrderIdEvmByReceipt, getResolvedOrderByAztecLogs, parseFilledLog } from "./utils/gateway"
 
 import type {
   BridgeConfigs,
@@ -68,13 +80,23 @@ export class Bridge {
   aztecPxe?: PXE
   aztecKeySalt?: Hex
   aztecSecretKey?: Hex
+  beaconApiUrl?: string
   evmPrivateKey?: Hex
   evmProvider?: any
   #walletAccountRegistered = false
   #aztecGatewayRegistered = false
 
   constructor(configs: BridgeConfigs) {
-    const { azguardClient, aztecNode, aztecPxe, aztecKeySalt, aztecSecretKey, evmPrivateKey, evmProvider } = configs
+    const {
+      azguardClient,
+      aztecNode,
+      aztecPxe,
+      aztecKeySalt,
+      aztecSecretKey,
+      beaconApiUrl,
+      evmPrivateKey,
+      evmProvider,
+    } = configs
 
     if (!aztecSecretKey && !aztecKeySalt && !azguardClient) {
       throw new Error("You must specify aztecSecretKey and aztecKeySalt or azguardClient")
@@ -101,6 +123,7 @@ export class Bridge {
     this.aztecPxe = aztecPxe
     this.aztecKeySalt = aztecKeySalt
     this.aztecSecretKey = aztecSecretKey
+    this.beaconApiUrl = beaconApiUrl
     this.evmPrivateKey = evmPrivateKey
     this.evmProvider = evmProvider
   }
@@ -118,6 +141,16 @@ export class Bridge {
       return this.#forwardRefundOrderToL2(details)
     } else if (chainOut.id === aztecSepolia.id) {
       return this.#forwardRefundOrderToAztec(details)
+    }
+    throw new Error("Neither chain is Aztec")
+  }
+
+  async finalizeRefundOrder(details: RefundOrderDetails): Promise<Hex> {
+    const { chainIn, chainOut } = details
+    if (chainIn.id === aztecSepolia.id) {
+      return this.#finalizeRefundOrderToL2(details)
+    } else if (chainOut.id === aztecSepolia.id) {
+      return this.#finalizeRefundOrderToAztec(details)
     }
     throw new Error("Neither chain is Aztec")
   }
@@ -387,6 +420,77 @@ export class Bridge {
     return receipt.txHash.toString()
   }
 
+  async #finalizeRefundOrderToAztec(details: RefundOrderDetails): Promise<Hex> {
+    throw new Error("Not implemented")
+  }
+
+  async #finalizeRefundOrderToL2(details: RefundOrderDetails): Promise<Hex> {
+    const { chainForwarder, chainIn, chainOut, orderId } = details
+    if (!chainForwarder) throw new Error("You must specify a forwarder chain")
+    const { gatewayIn } = this.#getGatewaysByChains(chainIn, chainOut)
+    const forwarderAddress = forwarderAddresses[chainForwarder.id]
+    if (forwarderAddress) throw new Error("Forwarder chain not supported")
+
+    const message = [Buffer.from(REFUND_ORDER_TYPE.slice(2), "hex"), Buffer.from(orderId.slice(2), "hex")]
+    const messageHash = sha256ToField(message)
+
+    const { parentBeaconBlockRoot: beaconRoot, timestamp: beaconOracleTimestamp } = await createPublicClient({
+      chain: chainOut as Chain,
+      transport: http(),
+    }).getBlock()
+
+    if (!this.beaconApiUrl) throw new Error("Beacon api url not specified")
+    const resp = await fetch(`${this.beaconApiUrl}/eth/v2/beacon/blocks/${beaconRoot}`, {
+      headers: { Accept: "application/octet-stream" },
+    })
+
+    const beaconBlock = SignedBeaconBlock.deserialize(new Uint8Array(await resp.arrayBuffer())).message
+    const l1BlockNumber = BigInt(beaconBlock.body.executionPayload.blockNumber)
+
+    const stateRootInclusionProof = getExecutionStateRootProof(beaconBlock)
+    const storageKey = keccak256(
+      encodeAbiParameters(
+        [{ type: "bytes32" }, { type: "uint256" }],
+        [messageHash.toString(), FORWARDER_REFUNDED_ORDERS_SLOT],
+      ),
+    )
+    const proof = await createPublicClient({
+      chain: chainForwarder,
+      transport: http(),
+    }).getProof({
+      address: forwarderAddress,
+      storageKeys: [storageKey],
+      blockNumber: l1BlockNumber,
+    })
+
+    const accountProofParameters = {
+      storageKey: proof.storageProof[0]!.key,
+      storageValue: proof.storageProof[0]!.value === 1n ? "0x01" : "0x00",
+      accountProof: proof.accountProof,
+      storageProof: proof.storageProof[0]!.proof,
+    }
+    if (accountProofParameters.storageValue === "0x00") {
+      throw new Error(`Storage value not up to date yet for order ${orderId} or order refund not forwarded yet`)
+    }
+
+    const stateRootParameters = {
+      beaconRoot,
+      beaconOracleTimestamp,
+      executionStateRoot: stateRootInclusionProof.leaf,
+      stateRootProof: stateRootInclusionProof.proof,
+    }
+
+    const { address, walletClient } = await this.#getEvmWalletClientAndAddress(chainIn as Chain)
+    return await walletClient.writeContract({
+      abi: l2Gateway7683Abi,
+      account: this.evmPrivateKey ? walletClient.account! : address,
+      address: gatewayIn,
+      args: [bytesToHex(Buffer.concat([...message])), stateRootParameters, accountProofParameters],
+      chain: chainIn as Chain,
+      functionName: "refund",
+    })
+  }
+
   async #forwardRefundOrderToL2(details: RefundOrderDetails): Promise<Hex> {
     const { orderId, chainIn, chainOut, chainForwarder } = details
     if (!chainForwarder) throw new Error("You must specify a forwarder chain")
@@ -456,7 +560,7 @@ export class Bridge {
     )
 
     const { walletClient, address } = await this.#getEvmWalletClientAndAddress(chainForwarder)
-    const forwardSettleTxHash = await walletClient.writeContract({
+    return await walletClient.writeContract({
       abi: forwarderAbi,
       account: this.evmPrivateKey ? walletClient.account! : address,
       address: forwarderAddress,
@@ -468,10 +572,8 @@ export class Bridge {
         siblingPath.toBufferArray().map((buff) => "0x" + buff.toString("hex")),
       ],
       chain: chainForwarder,
-      functionName: "forwardSettleToL2",
+      functionName: "forwardRefundToL2",
     })
-
-    return forwardSettleTxHash
   }
 
   async #forwardRefundOrderToAztec(details: RefundOrderDetails): Promise<Hex> {
@@ -495,7 +597,6 @@ export class Bridge {
       })
       this.#walletAccountRegistered = true
     }
-
     return await account.getWallet()
   }
 
@@ -853,7 +954,7 @@ export class Bridge {
     const { walletClient, address } = await this.#getEvmWalletClientAndAddress(chainOut as Chain)
     const log = await this.#getAztecOpenLogByOrderId(orderId)
 
-    const txHash = await walletClient.writeContract({
+    return await walletClient.writeContract({
       abi: l2Gateway7683Abi,
       account: this.evmPrivateKey ? walletClient.account! : address,
       address: gatewayOut,
@@ -869,8 +970,6 @@ export class Bridge {
       chain: chainOut as Chain,
       functionName: "refund",
     })
-
-    return txHash
   }
 
   async #refundEvmToAztecOrder(details: RefundOrderDetails): Promise<Hex> {

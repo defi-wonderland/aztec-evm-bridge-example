@@ -12,6 +12,7 @@ export const OPENED = 1
 export const FILLED = 2
 export const FILLED_PRIVATELY = 3
 export const AZTEC_VERSION = 3924331020
+export const FORWARDER_REFUNDED_ORDERS_SLOT = 3n
 
 export const aztecSepolia = {
   id: 999999,
