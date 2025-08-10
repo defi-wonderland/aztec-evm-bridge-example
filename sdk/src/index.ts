@@ -164,9 +164,9 @@ export class Bridge {
     if (data.length !== 66) throw new Error("Invalid data: must be 32 bytes")
 
     if (chainIn.id === aztecSepolia.id) {
-      return this.#aztecToEvm(order, callbacks)
+      return this.#createAztecToEvmOrder(order, callbacks)
     } else if (chainOut.id === aztecSepolia.id) {
-      return this.#evmToAztec(order, callbacks)
+      return this.#createEvmToAztecOrder(order, callbacks)
     } else {
       throw new Error("Neither chain is Aztec")
     }
@@ -188,7 +188,7 @@ export class Bridge {
     return this.#refundEvmToAztecOrder(details)
   }
 
-  async #aztecToEvm(order: Order, callbacks?: OrderCallbacks): Promise<OrderResult> {
+  async #createAztecToEvmOrder(order: Order, callbacks?: OrderCallbacks): Promise<OrderResult> {
     if (this.azguardClient) return this.#aztecToEvmAzguard(order, callbacks)
     return this.#aztecToEvmDefault(order, callbacks)
   }
@@ -420,7 +420,7 @@ export class Bridge {
     return receipt.txHash.toString()
   }
 
-  async #evmToAztec(order: Order, callbacks?: OrderCallbacks): Promise<OrderResult> {
+  async #createEvmToAztecOrder(order: Order, callbacks?: OrderCallbacks): Promise<OrderResult> {
     const { amountIn, amountOut, chainIn, chainOut, data, mode, recipient, tokenIn, tokenOut } = order
     const { onSecret, onOrderOpened, onOrderClaimed } = callbacks || {}
     const { gatewayIn, gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
@@ -602,6 +602,107 @@ export class Bridge {
     throw new Error("Not implemented")
   }
 
+  async #getAztecWallet() {
+    const secretKey = Fr.fromHexString(this.aztecSecretKey!)
+    const salt = Fr.fromHexString(this.aztecKeySalt!)
+    const signingKey = deriveSigningKey(secretKey)
+    const account = await getSchnorrAccount(this.aztecPxe!, secretKey, signingKey, salt)
+    if (!this.#walletAccountRegistered) {
+      await this.aztecPxe?.registerAccount(secretKey, (await account.getCompleteAddress()).partialAddress)
+      await this.aztecPxe?.registerContract({
+        instance: account.getInstance(),
+        artifact: SchnorrAccountContractArtifact,
+      })
+      await this.aztecPxe?.registerContract({
+        instance: await getSponsoredFPCInstance(),
+        artifact: SponsoredFPCContractArtifact,
+      })
+      this.#walletAccountRegistered = true
+    }
+
+    return await account.getWallet()
+  }
+
+  async #getEvmWalletClientAndAddress(chain: Chain) {
+    const walletClient = this.evmProvider
+      ? createWalletClient({
+          chain,
+          transport: custom(this.evmProvider),
+        })
+      : createWalletClient({
+          chain,
+          account: privateKeyToAccount(this.evmPrivateKey!),
+          transport: http(),
+        })
+
+    let address
+    if (walletClient.account) {
+      // privateKeyToAccount
+      address = walletClient.account.address
+    } else {
+      // window.ethereum
+      ;[address] = await walletClient.getAddresses()
+    }
+    return {
+      walletClient,
+      address,
+    }
+  }
+
+  #getOrderType(mode: Order["mode"]): number {
+    switch (mode) {
+      case "private":
+        return PRIVATE_ORDER
+      case "privateWithHook":
+        return PRIVATE_ORDER_WITH_HOOK
+      case "public":
+        return PUBLIC_ORDER
+      case "publicWithHook":
+        return PUBLIC_ORDER_WITH_HOOK
+      default:
+        throw new Error("Invalid mode")
+    }
+  }
+
+  #getGatewaysByChains(
+    chainIn: Order["chainIn"],
+    chainOut: Order["chainOut"],
+  ): {
+    gatewayIn: Hex
+    gatewayOut: Hex
+  } {
+    const gatewayIn = gatewayAddresses[chainIn.id]
+    if (!gatewayIn) throw new Error("Unsupported source chain")
+    const gatewayOut = gatewayAddresses[chainOut.id]
+    if (!gatewayOut) throw new Error("Unsupported destination chain")
+    return {
+      gatewayIn,
+      gatewayOut,
+    }
+  }
+
+  async #getAztecFilledLogByOrderId(orderId: Hex): Promise<FilledLog | undefined> {
+    // TODO: understand why if i use fromBlock and toBlock i always receive the penultimante log.
+    // Basically i never receive the last one even if block numbers are up to date
+    const gateway = gatewayAddresses[aztecSepolia.id]
+    const { logs } = await this.aztecNode.getPublicLogs({
+      contractAddress: AztecAddress.fromString(gateway),
+    })
+    const parsedLogs = logs.map(({ log }) => parseFilledLog(log.fields))
+    return parsedLogs.find((log) => log.orderId === orderId)
+  }
+
+  async #getAztecOpenLogByOrderId(orderId: Hex): Promise<ParsedOpenLog | undefined> {
+    // TODO: understand why if i use fromBlock and toBlock i always receive the penultimante log.
+    // Basically i never receive the last one even if block numbers are up to date
+    const gateway = gatewayAddresses[aztecSepolia.id]
+    const { logs } = await this.aztecNode.getPublicLogs({
+      contractAddress: AztecAddress.fromString(gateway),
+    })
+    const parsedOpenLogs = getParsedOpenLogs(logs)
+    return parsedOpenLogs.find((order) => order.orderId === orderId)
+  }
+
   async #monitorAztecToEvmOrder(order: Order, receipt: TxReceipt, callbacks?: OrderCallbacks): Promise<Hex> {
     const { chainIn, chainOut } = order
     const { onOrderOpened, onOrderFilled } = callbacks || {}
@@ -709,107 +810,6 @@ export class Bridge {
       }
       await sleep(3000)
     }
-  }
-
-  async #getAztecWallet() {
-    const secretKey = Fr.fromHexString(this.aztecSecretKey!)
-    const salt = Fr.fromHexString(this.aztecKeySalt!)
-    const signingKey = deriveSigningKey(secretKey)
-    const account = await getSchnorrAccount(this.aztecPxe!, secretKey, signingKey, salt)
-    if (!this.#walletAccountRegistered) {
-      await this.aztecPxe?.registerAccount(secretKey, (await account.getCompleteAddress()).partialAddress)
-      await this.aztecPxe?.registerContract({
-        instance: account.getInstance(),
-        artifact: SchnorrAccountContractArtifact,
-      })
-      await this.aztecPxe?.registerContract({
-        instance: await getSponsoredFPCInstance(),
-        artifact: SponsoredFPCContractArtifact,
-      })
-      this.#walletAccountRegistered = true
-    }
-
-    return await account.getWallet()
-  }
-
-  async #getEvmWalletClientAndAddress(chain: Chain) {
-    const walletClient = this.evmProvider
-      ? createWalletClient({
-          chain,
-          transport: custom(this.evmProvider),
-        })
-      : createWalletClient({
-          chain,
-          account: privateKeyToAccount(this.evmPrivateKey!),
-          transport: http(),
-        })
-
-    let address
-    if (walletClient.account) {
-      // privateKeyToAccount
-      address = walletClient.account.address
-    } else {
-      // window.ethereum
-      ;[address] = await walletClient.getAddresses()
-    }
-    return {
-      walletClient,
-      address,
-    }
-  }
-
-  #getOrderType(mode: Order["mode"]): number {
-    switch (mode) {
-      case "private":
-        return PRIVATE_ORDER
-      case "privateWithHook":
-        return PRIVATE_ORDER_WITH_HOOK
-      case "public":
-        return PUBLIC_ORDER
-      case "publicWithHook":
-        return PUBLIC_ORDER_WITH_HOOK
-      default:
-        throw new Error("Invalid mode")
-    }
-  }
-
-  #getGatewaysByChains(
-    chainIn: Order["chainIn"],
-    chainOut: Order["chainOut"],
-  ): {
-    gatewayIn: Hex
-    gatewayOut: Hex
-  } {
-    const gatewayIn = gatewayAddresses[chainIn.id]
-    if (!gatewayIn) throw new Error("Unsupported source chain")
-    const gatewayOut = gatewayAddresses[chainOut.id]
-    if (!gatewayOut) throw new Error("Unsupported destination chain")
-    return {
-      gatewayIn,
-      gatewayOut,
-    }
-  }
-
-  async #getAztecFilledLogByOrderId(orderId: Hex): Promise<FilledLog | undefined> {
-    // TODO: understand why if i use fromBlock and toBlock i always receive the penultimante log.
-    // Basically i never receive the last one even if block numbers are up to date
-    const gateway = gatewayAddresses[aztecSepolia.id]
-    const { logs } = await this.aztecNode.getPublicLogs({
-      contractAddress: AztecAddress.fromString(gateway),
-    })
-    const parsedLogs = logs.map(({ log }) => parseFilledLog(log.fields))
-    return parsedLogs.find((log) => log.orderId === orderId)
-  }
-
-  async #getAztecOpenLogByOrderId(orderId: Hex): Promise<ParsedOpenLog | undefined> {
-    // TODO: understand why if i use fromBlock and toBlock i always receive the penultimante log.
-    // Basically i never receive the last one even if block numbers are up to date
-    const gateway = gatewayAddresses[aztecSepolia.id]
-    const { logs } = await this.aztecNode.getPublicLogs({
-      contractAddress: AztecAddress.fromString(gateway),
-    })
-    const parsedOpenLogs = getParsedOpenLogs(logs)
-    return parsedOpenLogs.find((order) => order.orderId === orderId)
   }
 
   async #maybeRegisterAztecGateway(): Promise<void> {
