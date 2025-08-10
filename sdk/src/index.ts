@@ -501,7 +501,7 @@ export class Bridge {
 
     const message = [Buffer.from(REFUND_ORDER_TYPE.slice(2), "hex"), Buffer.from(orderId.slice(2), "hex")]
     const messageHash = sha256ToField(message)
-    const l2ToL1Message = sha256ToField([
+    const l2ToL1MessageHash = sha256ToField([
       Buffer.from(gatewayIn, "hex"),
       new Fr(AZTEC_VERSION).toBuffer(),
       EthAddress.fromString(forwarderAddress).toBuffer32(),
@@ -538,7 +538,7 @@ export class Bridge {
         .simulate()) as bigint
     }
 
-    const orderSettlementBlockNumber = await getOrderSettlementBlockNumber()
+    const aztecOrderSettlementBlockNumber = await getOrderSettlementBlockNumber()
     const provenBlockNumber = (await createPublicClient({
       chain: chainForwarder,
       transport: http(),
@@ -548,28 +548,30 @@ export class Bridge {
       abi: rollupAbi,
       functionName: "getProvenBlockNumber",
     })) as bigint
-    if (orderSettlementBlockNumber > provenBlockNumber) {
+    if (aztecOrderSettlementBlockNumber > provenBlockNumber) {
       throw new Error(
-        `cannot forward settlement to L2 for order ${orderId} because the corresponding block number ${orderSettlementBlockNumber} is > than the last proven ${provenBlockNumber}!`,
+        `cannot forward settlement to L2 for order ${orderId} because the corresponding block number ${aztecOrderSettlementBlockNumber} is > than the last proven ${provenBlockNumber}!`,
       )
     }
 
     const [l2ToL1MessageIndex, siblingPath] = await this.aztecPxe!.getL2ToL1MembershipWitness(
-      parseInt(orderSettlementBlockNumber.toString()),
-      l2ToL1Message,
+      parseInt(aztecOrderSettlementBlockNumber.toString()),
+      l2ToL1MessageHash,
     )
 
+    const l2ToL1Message = [[gatewayIn, AZTEC_VERSION], [forwarderAddress, chainForwarder.id], messageHash.toString()]
+    const path = siblingPath.toBufferArray().map((buff) => "0x" + buff.toString("hex"))
     const { walletClient, address } = await this.#getEvmWalletClientAndAddress(chainForwarder)
     return await walletClient.writeContract({
       abi: forwarderAbi,
       account: this.evmPrivateKey ? walletClient.account! : address,
       address: forwarderAddress,
       args: [
-        [[gatewayIn, AZTEC_VERSION], [forwarderAddress, chainForwarder.id], messageHash.toString()],
+        l2ToL1Message,
         bytesToHex(Buffer.concat([...message])),
-        orderSettlementBlockNumber,
+        aztecOrderSettlementBlockNumber,
         l2ToL1MessageIndex,
-        siblingPath.toBufferArray().map((buff) => "0x" + buff.toString("hex")),
+        path,
       ],
       chain: chainForwarder,
       functionName: "forwardRefundToL2",
