@@ -10,7 +10,6 @@ import {
   encodeAbiParameters,
   erc20Abi,
   Hex,
-  hexToBytes,
   http,
   keccak256,
   padHex,
@@ -26,7 +25,7 @@ import { poseidon2Hash, sha256ToField } from "@aztec/foundation/crypto"
 import { waitForTransactionReceipt } from "viem/actions"
 import { privateKeyToAccount } from "viem/accounts"
 import { SponsoredFPCContractArtifact } from "@aztec/noir-contracts.js/SponsoredFPC"
-const { ssz } = await import("@lodestar/types")
+import { ssz } from "@lodestar/types"
 const { SignedBeaconBlock } = ssz.electra
 
 import {
