@@ -3,8 +3,9 @@ import { Fr } from "@aztec/aztec.js"
 
 import l2Gateway7683Abi from "./abi/l2Gateway7683"
 
-import type { FilledLog, ResolvedOrder } from "../types"
 import type { ExtendedPublicLog, PublicLog } from "@aztec/stdlib/logs"
+import type { AbiParameter } from "viem"
+import type { FilledLog, ResolvedOrder } from "../types"
 
 export type LogWithTopics = Log & {
   topics: string[]
@@ -150,10 +151,11 @@ export const getResolvedOrderAndOrderIdEvmByReceipt = (
 }
 
 export const parseResolvedOrderEvm = (log: Log): ResolvedOrder => {
-  const [resolvedOrder] = decodeAbiParameters(
-    [l2Gateway7683Abi.find((el) => el.name === "Open")?.inputs[1] as any],
-    log.data,
-  ) as [ResolvedOrder]
+  const openEvent = l2Gateway7683Abi.find((el) => el.name === "Open")
+  if (!openEvent || !openEvent.inputs[1]) {
+    throw new Error("Invalid ABI: Could not find Open event or inputs[1]")
+  }
+  const [resolvedOrder] = decodeAbiParameters([openEvent.inputs[1] as AbiParameter], log.data) as [ResolvedOrder]
   return resolvedOrder
 }
 

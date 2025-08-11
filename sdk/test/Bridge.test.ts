@@ -13,7 +13,7 @@ import { TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
 
 import { Bridge } from "../src"
 import { aztecSepolia } from "../src/constants"
-import { InternalChain, ResolvedOrder } from "../src/types"
+import { ResolvedOrder } from "../src/types"
 import { OrderDataEncoder } from "../src/utils"
 
 const WETH_ON_AZTEC_SEPOLIA_ADDRESS = "0x143c799188d6881bff72012bebb100d19b51ce0c90b378bfa3ba57498b5ddeeb"
@@ -62,7 +62,6 @@ const setup = async () => {
 describe("Bridge", () => {
   describe("Initialization", () => {
     it("cannot initialize bridge without aztecSecretKey and aztecKeySalt or azguardClient", async () => {
-      const { aztecNode } = await setup()
       const createBridge = () =>
         new Bridge({
           evmPrivateKey: process.env.EVM_PK as Hex,
@@ -71,7 +70,6 @@ describe("Bridge", () => {
     })
 
     it("cannot specify evmPrivateKey and evmProvider", async () => {
-      const { aztecNode } = await setup()
       const createBridge = () =>
         new Bridge({
           aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
@@ -160,7 +158,7 @@ describe("Bridge", () => {
     })
 
     it("should be able to open a private order from Aztec to Base", async () => {
-      const { aztecPxe, aztecNode } = await setup()
+      const { aztecPxe } = await setup()
       const bridge = new Bridge({
         evmPrivateKey: process.env.EVM_PK as Hex,
         aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
@@ -189,7 +187,7 @@ describe("Bridge", () => {
     })
 
     it("should be able to open a private order from Aztec to Base and then ask for a refund", async () => {
-      const { aztecPxe, aztecNode } = await setup()
+      const { aztecPxe } = await setup()
       const bridge = new Bridge({
         evmPrivateKey: process.env.EVM_PK as Hex,
         aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
@@ -197,7 +195,7 @@ describe("Bridge", () => {
         aztecPxe,
       })
       const openOrder = (): Promise<Hex> =>
-        new Promise(async (resolve) => {
+        new Promise((resolve) => {
           bridge.openOrder(
             {
               chainIn: aztecSepolia as Chain,
@@ -226,7 +224,7 @@ describe("Bridge", () => {
     })
 
     it("should be able to open a private order from Aztec to Base and fill it", async () => {
-      const { aztecPxe, aztecNode } = await setup()
+      const { aztecPxe } = await setup()
       const bridge = new Bridge({
         evmPrivateKey: process.env.EVM_PK as Hex,
         aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
@@ -234,7 +232,7 @@ describe("Bridge", () => {
         aztecPxe,
       })
       const openOrder = (): Promise<{ orderId: Hex; resolvedOrder: ResolvedOrder }> =>
-        new Promise(async (resolve) => {
+        new Promise((resolve) => {
           bridge.openOrder(
             {
               chainIn: aztecSepolia as Chain,
@@ -316,7 +314,7 @@ describe("Bridge", () => {
     })
 
     it("should be able to open a public order from Base to Aztec", async () => {
-      const { aztecPxe, aztecNode, aztecAccount } = await setup()
+      const { aztecPxe, aztecAccount } = await setup()
       const bridge = new Bridge({
         evmPrivateKey: process.env.EVM_PK as Hex,
         aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
@@ -367,7 +365,7 @@ describe("Bridge", () => {
       })
 
       const openOrder = (): Promise<Hex> =>
-        new Promise(async (resolve) => {
+        new Promise((resolve) => {
           bridge.openOrder(
             {
               chainIn: baseSepolia,
@@ -410,7 +408,7 @@ describe("Bridge", () => {
       })
 
       const openOrder = (): Promise<{ orderId: Hex; resolvedOrder: ResolvedOrder }> =>
-        new Promise(async (resolve) => {
+        new Promise((resolve) => {
           bridge.openOrder(
             {
               chainIn: baseSepolia,
@@ -451,7 +449,7 @@ describe("Bridge", () => {
       })
 
       const openOrder = (): Promise<{ orderId: Hex; resolvedOrder: ResolvedOrder }> =>
-        new Promise(async (resolve) => {
+        new Promise((resolve) => {
           bridge.openOrder(
             {
               chainIn: baseSepolia,

@@ -1,4 +1,4 @@
-import { bytesToHex, encodePacked, hexToBytes, padHex } from "viem"
+import { bytesToHex, encodePacked, hexToBytes } from "viem"
 import { poseidon2Hash } from "@aztec/foundation/crypto"
 import { Fr } from "@aztec/aztec.js"
 

@@ -15,17 +15,7 @@ import {
   padHex,
 } from "viem"
 import * as evmChains from "viem/chains"
-import {
-  AztecAddress,
-  Fr,
-  PXE,
-  AztecNode,
-  TxHash,
-  sleep,
-  TxReceipt,
-  EthAddress,
-  createAztecNodeClient,
-} from "@aztec/aztec.js"
+import { AztecAddress, Fr, PXE, TxHash, sleep, TxReceipt, EthAddress, createAztecNodeClient } from "@aztec/aztec.js"
 import { AzguardClient } from "@azguardwallet/client"
 import { OkResult, SendTransactionResult, SimulateViewsResult } from "@azguardwallet/types"
 import { deriveSigningKey } from "@aztec/stdlib/keys"
@@ -100,6 +90,7 @@ export class Bridge {
   aztecSecretKey?: Hex
   beaconApiUrl?: string
   evmPrivateKey?: Hex
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   evmProvider?: any
   #walletAccountRegistered = false
   #aztecGatewayRegistered = false
@@ -738,12 +729,12 @@ export class Bridge {
     })
     const waitForFilledOrder = async (orderId: Hex): Promise<Hex> => {
       while (true) {
-        const result: any = await evmPublicClient.readContract({
+        const result = (await evmPublicClient.readContract({
           address: gatewayOut,
           abi: l2Gateway7683Abi,
           functionName: "filledOrders",
           args: [orderId],
-        })
+        })) as [Hex, Hex]
         if (result[0] !== "0x" && result[1] !== "0x") break
         await sleep(5000)
       }
@@ -1150,7 +1141,7 @@ export class Bridge {
     const { orderId, chainIn, chainOut } = details
     const { gatewayIn, gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
 
-    const order: any = await createPublicClient({
+    const order = (await createPublicClient({
       chain: chainIn as Chain,
       transport: http(),
     }).readContract({
@@ -1158,7 +1149,7 @@ export class Bridge {
       abi: l2Gateway7683Abi,
       functionName: "openOrders",
       args: [orderId],
-    })
+    })) as Hex
     if (!order || order === "0x") throw new Error("Cannot find an opened order for the specified order id")
     // NOTE opened on EVM -> trigger refund on Aztec
 

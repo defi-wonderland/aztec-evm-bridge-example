@@ -1,6 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { bytesToHex } from "viem"
 import { createProof, ProofType } from "@chainsafe/persistent-merkle-tree"
-import { ssz } from "@lodestar/types"
+const { ssz } = await import("@lodestar/types")
 const { BeaconBlock } = ssz.electra
 
 export const getExecutionStateRootProof = (block: any): { proof: string[]; leaf: string } => {

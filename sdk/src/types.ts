@@ -122,5 +122,6 @@ export interface BridgeConfigs {
   aztecSecretKey?: Hex
   beaconApiUrl?: string
   evmPrivateKey?: Hex
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   evmProvider?: any
 }
