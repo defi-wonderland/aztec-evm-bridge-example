@@ -1,4 +1,4 @@
-import { Chain, Hex, Log } from "viem"
+import { Chain, Hex } from "viem"
 import { PXE, AztecNode } from "@aztec/aztec.js"
 import { AzguardClient } from "@azguardwallet/client"
 
@@ -32,7 +32,8 @@ export interface FillInstruction {
   destinationChainId: number
 }
 
-export type SwapMode = "private" | "public" | "privateWithHook" | "publicWithHook"
+export type Mode = "private" | "public"
+export type SwapMode = Mode | "privateWithHook" | "publicWithHook"
 
 export interface Order {
   chainIn: Chain | { id: number; name: string }
@@ -47,6 +48,27 @@ export interface Order {
   fillDeadline?: number
 }
 
+export interface OrderData {
+  sender: Hex
+  recipient: Hex
+  inputToken: Hex
+  outputToken: Hex
+  amountIn: bigint
+  amountOut: bigint
+  senderNonce: bigint
+  originDomain: number // uint32
+  destinationDomain: number // uint32
+  destinationSettler: Hex
+  fillDeadline: number // uint32 (unix seconds)
+  orderType: number // uint8
+  data: Hex // bytes32 expected when packing
+}
+
+export interface FillOrderDetails {
+  orderId: Hex
+  orderData: OrderData
+}
+
 export interface RefundOrderDetails {
   orderId: Hex
   chainIn: Chain | { id: number; name: string }
@@ -54,10 +76,12 @@ export interface RefundOrderDetails {
   chainForwarder?: Chain
 }
 
-export type SettleOrderDetails = RefundOrderDetails
+export type SettleOrderDetails = RefundOrderDetails & {
+  fillerAddress: Hex
+}
 
 export type ForwardDetails = RefundOrderDetails & {
-  fillerData?: Hex
+  fillerAddress?: Hex
   type: "forwardSettleToL2" | "forwardRefundToL2"
 }
 
@@ -82,7 +106,7 @@ export interface BridgeConfigs {
   aztecPxe?: PXE
   aztecKeySalt?: Hex
   aztecSecretKey?: Hex
-  beaconApiUrl: string
+  beaconApiUrl?: string
   evmPrivateKey?: Hex
   evmProvider?: any
 }

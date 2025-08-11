@@ -15,6 +15,7 @@ import {
   keccak256,
   padHex,
 } from "viem"
+import * as evmChains from "viem/chains"
 import { AztecAddress, Fr, PXE, AztecNode, TxHash, sleep, TxReceipt, EthAddress } from "@aztec/aztec.js"
 import { AzguardClient } from "@azguardwallet/client"
 import { OkResult, SendTransactionResult, SimulateViewsResult } from "@azguardwallet/types"
@@ -35,7 +36,8 @@ import {
   getResolvedOrderByAztecLogs,
   getSponsoredFPCInstance,
   getSponsporedFeePaymentMethod,
-  OrderData,
+  hexToUintArray,
+  OrderDataEncoder,
   parseFilledLog,
 } from "./utils"
 import {
@@ -69,14 +71,18 @@ import forwarderAbi from "./utils/abi/forwarder"
 import type {
   BridgeConfigs,
   FilledLog,
+  FillOrderDetails,
   ForwardDetails,
   Order,
   OrderCallbacks,
+  OrderData,
   OrderResult,
   RefundOrderDetails,
   ResolvedOrder,
   SettleOrderDetails,
 } from "./types"
+
+const AZTEC_WAIT_TIMEOUT = 120000
 
 export class Bridge {
   azguardClient?: AzguardClient
@@ -133,10 +139,65 @@ export class Bridge {
   }
 
   async claimEvmToAztecPrivateOrder(orderId: Hex, secret: Hex): Promise<Hex> {
+    const gatewayOut = gatewayAddresses[aztecSepolia.id]
+    const log = await this.#getAztecFilledLogByOrderId(orderId)
+    if (!log) throw new Error(`Log not found for the specified order id ${orderId}`)
+    await this.#maybeRegisterAztecGateway()
+
     if (this.azguardClient) {
-      return this.#claimEvmToAztecPrivateOrderAzguard(orderId, secret)
+      // NOTE: Azguard currently doesn't expose the actively selected account.
+      // As a workaround, we default to using accounts[0], assuming it's the connected one.
+      const selectedAccount = this.azguardClient!.accounts[0]
+      const [response] = await this.azguardClient!.execute([
+        {
+          kind: "send_transaction",
+          account: selectedAccount,
+          actions: [
+            {
+              kind: "call",
+              contract: gatewayOut,
+              method: "claim_private",
+              args: [
+                secret,
+                hexToUintArray(orderId),
+                hexToUintArray(log.originData as Hex),
+                hexToUintArray(log.fillerData as Hex),
+              ],
+            },
+          ],
+        },
+      ])
+      if (response.status === "failed") throw new Error(response.error)
+      return (response as OkResult<SendTransactionResult>).result as Hex
     }
-    return this.#claimEvmToAztecPrivateOrderDefault(orderId, secret)
+
+    const wallet = await this.#getAztecWallet()
+    const gateway = await AztecGateway7683Contract.at(AztecAddress.fromString(gatewayOut), wallet)
+    const receipt = await gateway.methods
+      .claim_private(
+        Fr.fromString(secret),
+        hexToUintArray(orderId),
+        hexToUintArray(log.originData as Hex),
+        hexToUintArray(log.fillerData as Hex),
+      )
+      .send({ fee: { paymentMethod: await getSponsporedFeePaymentMethod() } })
+      .wait({
+        timeout: AZTEC_WAIT_TIMEOUT,
+      })
+
+    return receipt.txHash.toString()
+  }
+
+  async fillOrder(details: FillOrderDetails): Promise<Hex> {
+    const { orderData } = details
+    if (orderData.fillDeadline <= Math.floor(Date.now() / 1000)) throw new Error("Order expired")
+
+    if (orderData.originDomain === aztecSepolia.id) {
+      return this.#fillAztecToEvmOrder(details)
+    } else if (orderData.destinationDomain === aztecSepolia.id) {
+      return this.#fillEvmToAztecOrder(details)
+    }
+    throw new Error("Neither chain is Aztec")
   }
 
   async finalizeForwardRefundOrder(details: RefundOrderDetails): Promise<Hex> {
@@ -214,147 +275,134 @@ export class Bridge {
     throw new Error("Neither chain is Aztec")
   }
 
-  async #aztecToEvmAzguard(order: Order, callbacks?: OrderCallbacks): Promise<OrderResult> {
-    const { chainOut, mode, data, amountIn, amountOut, tokenIn, tokenOut, chainIn, recipient } = order
-    const { gatewayIn, gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
+  async #fillAztecToEvmOrder(details: FillOrderDetails): Promise<Hex> {
+    const { orderId, orderData } = details
+    const chainOut = Object.values(evmChains).find((chain: Chain) => chain.id === orderData.destinationDomain)
+    if (!chainOut) throw new Error("ChainOut not supported")
+    const gatewayOut = gatewayAddresses[chainOut.id]
 
-    const fillDeadline = order.fillDeadline ?? 2 ** 32 - 1
-    const nonce = Fr.random()
-    // NOTE: Azguard currently doesn't expose the actively selected account.
-    // As a workaround, we default to using accounts[0], assuming it's the connected one.
-    const selectedAccount = this.azguardClient!.accounts[0]
-    const isPrivate = mode.includes("private")
+    const { address, walletClient } = await this.#getEvmWalletClientAndAddress(chainOut)
+    const fillerData = padHex(address)
 
-    const orderData = new OrderData({
-      sender: isPrivate ? PRIVATE_SENDER : getAztecAddressFromAzguardAccount(selectedAccount),
-      recipient: padHex(recipient),
-      inputToken: padHex(tokenIn),
-      outputToken: padHex(tokenOut),
-      amountIn,
-      amountOut,
-      senderNonce: nonce.toBigInt(),
-      originDomain: chainIn.id,
-      destinationDomain: chainOut.id,
-      destinationSettler: padHex(gatewayOut),
-      fillDeadline,
-      orderType: this.#getOrderType(mode),
-      data: data || padHex("0x"),
+    const accountNonce = await createPublicClient({
+      chain: chainOut as Chain,
+      transport: http(),
+    }).getTransactionCount({
+      address: this.evmPrivateKey ? walletClient.account!.address : address,
     })
-
-    await this.#maybeRegisterAztecGateway()
-    const [response] = await this.azguardClient!.execute([
+    await waitForTransactionReceipt(
+      createClient({
+        chain: chainOut as Chain,
+        transport: http(),
+      }),
       {
-        kind: "send_transaction",
-        account: selectedAccount,
-        actions: [
-          {
-            kind: isPrivate ? "add_private_authwit" : "add_public_authwit",
-            content: {
-              kind: "call",
-              caller: gatewayIn,
-              contract: tokenIn,
-              method: isPrivate ? "transfer_to_public" : "transfer_in_public",
-              args: [getAztecAddressFromAzguardAccount(selectedAccount), gatewayIn, amountIn, nonce],
-            },
-          },
-          {
-            kind: "call",
-            contract: gatewayIn,
-            method: isPrivate ? "open_private" : "open",
-            args: [
-              {
-                fill_deadline: orderData.fillDeadline,
-                order_data: Array.from(hexToBytes(orderData.encode())),
-                order_data_type: Array.from(hexToBytes(ORDER_DATA_TYPE)),
-              },
-            ],
-          },
-        ],
+        hash: await walletClient.writeContract({
+          abi: erc20Abi,
+          account: this.evmPrivateKey ? walletClient.account! : address,
+          address: `0x${orderData.outputToken.slice(26)}`,
+          args: [gatewayOut, orderData.amountOut],
+          chain: chainOut as Chain,
+          functionName: "approve",
+          nonce: accountNonce,
+        }),
       },
-    ])
-    if (response.status === "failed") throw new Error(response.error)
-    const orderOpenedTxHash = (response as OkResult<SendTransactionResult>).result as Hex
-
-    const waitForReceipt = async (txHash: string): Promise<TxReceipt> => {
-      while (true) {
-        const receipt = await this.aztecNode.getTxReceipt(TxHash.fromString(txHash))
-        if (receipt.status === "success") return receipt
-        if (receipt.status === "pending") {
-          await sleep(5000)
-          continue
-        }
-        throw new Error("Aztec transaction failed")
-      }
-    }
-    const orderCreatedReceipt = await waitForReceipt(orderOpenedTxHash)
-    const { transactionHash: orderFilledTxHash, resolvedOrder } = await this.#monitorAztecToEvmOrder(
-      order,
-      orderCreatedReceipt,
-      callbacks,
     )
-
-    return {
-      orderOpenedTxHash,
-      orderFilledTxHash,
-      resolvedOrder,
-    }
+    const orderDataEncoder = new OrderDataEncoder(orderData)
+    return await walletClient.writeContract({
+      abi: l2Gateway7683Abi,
+      account: this.evmPrivateKey ? walletClient.account! : address,
+      address: gatewayOut,
+      args: [
+        orderId,
+        orderDataEncoder.encode(),
+        fillerData, // NOTE: needed for the settlement
+      ],
+      chain: chainOut as Chain,
+      functionName: "fill",
+      nonce: accountNonce + 1,
+    })
   }
 
-  async #aztecToEvmDefault(order: Order, callbacks?: OrderCallbacks): Promise<OrderResult> {
-    const { chainOut, mode, data, amountIn, amountOut, tokenIn, tokenOut, chainIn, recipient } = order
-    const { gatewayIn, gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
-    const wallet = await this.#getAztecWallet()
-
+  async #fillEvmToAztecOrder(details: FillOrderDetails): Promise<Hex> {
+    const { orderId, orderData } = details
+    const chainOut = aztecSepolia
+    const gatewayOut = gatewayAddresses[chainOut.id]
+    const orderType = orderData.orderType
+    const isPrivate = orderType === PRIVATE_ORDER || orderType === PRIVATE_ORDER_WITH_HOOK
+    const orderDataEncoder = new OrderDataEncoder(orderData)
     await this.#maybeRegisterAztecGateway()
-    await this.aztecPxe?.registerContract({
-      instance: (await this.aztecNode.getContract(AztecAddress.fromString(tokenIn)))!,
-      artifact: TokenContractArtifact,
-    })
 
-    const fillDeadline = order.fillDeadline ?? 2 ** 32 - 1
-    const nonce = Fr.random()
-    const isPrivate = mode.includes("private")
+    if (this.azguardClient) {
+      const selectedAccount = this.azguardClient.accounts[0]
+      const fillerData = getAztecAddressFromAzguardAccount(selectedAccount)
+      const [response] = await this.azguardClient.execute([
+        {
+          kind: "send_transaction",
+          account: selectedAccount,
+          actions: [
+            {
+              kind: isPrivate ? "add_private_authwit" : "add_public_authwit",
+              content: {
+                kind: "call",
+                caller: gatewayOut,
+                contract: orderData.outputToken,
+                method: isPrivate ? "transfer_to_public" : "transfer_in_public",
+                args: isPrivate
+                  ? [
+                      getAztecAddressFromAzguardAccount(selectedAccount),
+                      AztecAddress.fromString(gatewayOut), // NOTE: private orders must be claimed by the user
+                      orderData.amountOut,
+                      orderData.senderNonce,
+                    ]
+                  : [
+                      getAztecAddressFromAzguardAccount(selectedAccount),
+                      AztecAddress.fromString(orderData.recipient),
+                      orderData.amountOut,
+                      orderData.senderNonce,
+                    ],
+              },
+            },
+            {
+              kind: "call",
+              contract: gatewayOut,
+              method: isPrivate ? "fill_private" : "fill",
+              args: [hexToUintArray(orderId), hexToUintArray(orderDataEncoder.encode()), hexToUintArray(fillerData)],
+            },
+          ],
+        },
+      ])
+      if (response.status === "failed") throw new Error(response.error)
+      return (response as OkResult<SendTransactionResult>).result as Hex
+    }
 
-    const orderData = new OrderData({
-      sender: isPrivate ? PRIVATE_SENDER : wallet.getAddress().toString(),
-      recipient: padHex(recipient),
-      inputToken: padHex(tokenIn),
-      outputToken: padHex(tokenOut),
-      amountIn,
-      amountOut,
-      senderNonce: nonce.toBigInt(),
-      originDomain: chainIn.id,
-      destinationDomain: chainOut.id,
-      destinationSettler: padHex(gatewayOut),
-      fillDeadline,
-      orderType: this.#getOrderType(mode),
-      data: data || padHex("0x"),
-    })
-
-    const gateway = await AztecGateway7683Contract.at(AztecAddress.fromString(gatewayIn), wallet)
-    const token = await TokenContract.at(AztecAddress.fromString(tokenIn), wallet)
+    const wallet = await this.#getAztecWallet()
+    const fillerData = wallet.getAddress().toString()
+    const [token, aztecGateway] = await Promise.all([
+      TokenContract.at(AztecAddress.fromString(orderData.outputToken), wallet),
+      AztecGateway7683Contract.at(AztecAddress.fromString(gatewayOut), wallet),
+    ])
 
     let witness
     if (isPrivate) {
       witness = await wallet.createAuthWit({
-        caller: AztecAddress.fromString(gatewayIn),
+        caller: AztecAddress.fromString(gatewayOut),
         action: token.methods.transfer_to_public(
           wallet.getAddress(),
-          AztecAddress.fromString(gatewayIn),
-          amountIn,
-          nonce,
+          AztecAddress.fromString(gatewayOut), // NOTE: private orders must be claimed by the user
+          orderData.amountOut,
+          orderData.senderNonce,
         ),
       })
     } else {
-      await (
+      ;(
         await wallet.setPublicAuthWit(
           {
-            caller: AztecAddress.fromString(gatewayIn),
+            caller: AztecAddress.fromString(gatewayOut),
             action: token.methods.transfer_in_public(
               wallet.getAddress(),
-              AztecAddress.fromString(gatewayIn),
-              amountIn,
-              nonce,
+              AztecAddress.fromString(orderData.recipient),
+              orderData.amountOut,
+              orderData.senderNonce,
             ),
           },
           true,
@@ -362,90 +410,23 @@ export class Bridge {
       )
         .send({ fee: { paymentMethod: await getSponsporedFeePaymentMethod() } })
         .wait({
-          timeout: 120000,
+          timeout: AZTEC_WAIT_TIMEOUT,
         })
     }
 
-    const receipt = await gateway.methods[isPrivate ? "open_private" : "open"]({
-      fill_deadline: fillDeadline,
-      order_data: Array.from(hexToBytes(orderData.encode())),
-      order_data_type: Array.from(hexToBytes(ORDER_DATA_TYPE)),
-    })
+    const receipt = await aztecGateway.methods[isPrivate ? "fill_private" : "fill"](
+      hexToUintArray(orderId),
+      hexToUintArray(orderDataEncoder.encode()),
+      hexToUintArray(fillerData),
+    )
       .with({
         authWitnesses: witness ? [witness] : [],
       })
-      .send({ fee: { paymentMethod: await getSponsporedFeePaymentMethod() } })
-      .wait({
-        timeout: 120000,
+      .send({
+        fee: { paymentMethod: await getSponsporedFeePaymentMethod() },
       })
-
-    const { transactionHash: orderFilledTxHash, resolvedOrder } = await this.#monitorAztecToEvmOrder(
-      order,
-      receipt,
-      callbacks,
-    )
-    return {
-      orderOpenedTxHash: receipt.txHash.toString(),
-      orderFilledTxHash,
-      resolvedOrder,
-    }
-  }
-
-  async #claimEvmToAztecPrivateOrderAzguard(orderId: Hex, secret: Hex): Promise<Hex> {
-    const gateway = gatewayAddresses[aztecSepolia.id]
-    // NOTE: Azguard currently doesn't expose the actively selected account.
-    // As a workaround, we default to using accounts[0], assuming it's the connected one.
-    const selectedAccount = this.azguardClient!.accounts[0]
-    await this.#maybeRegisterAztecGateway()
-
-    const log = await this.#getAztecFilledLogByOrderId(orderId)
-    if (!log) throw new Error(`Log not found for the specified order id ${orderId}`)
-
-    const [response] = await this.azguardClient!.execute([
-      {
-        kind: "send_transaction",
-        account: selectedAccount,
-        actions: [
-          {
-            kind: "call",
-            contract: gateway,
-            method: "claim_private",
-            args: [
-              secret,
-              Array.from(hexToBytes(orderId)),
-              Array.from(hexToBytes(log.originData as Hex)),
-              Array.from(hexToBytes(log.fillerData as Hex)),
-            ],
-          },
-        ],
-      },
-    ])
-    if (response.status === "failed") throw new Error(response.error)
-    return (response as OkResult<SendTransactionResult>).result as Hex
-  }
-
-  async #claimEvmToAztecPrivateOrderDefault(orderId: Hex, secret: Hex): Promise<Hex> {
-    const wallet = await this.#getAztecWallet()
-    await this.#maybeRegisterAztecGateway()
-
-    const log = await this.#getAztecFilledLogByOrderId(orderId)
-    if (!log) throw new Error(`Log not found for the specified order id ${orderId}`)
-
-    const gateway = await AztecGateway7683Contract.at(
-      AztecAddress.fromString(gatewayAddresses[aztecSepolia.id]),
-      wallet,
-    )
-
-    const receipt = await gateway.methods
-      .claim_private(
-        Fr.fromString(secret),
-        Array.from(hexToBytes(orderId)),
-        Array.from(hexToBytes(log.originData as Hex)),
-        Array.from(hexToBytes(log.fillerData as Hex)),
-      )
-      .send({ fee: { paymentMethod: await getSponsporedFeePaymentMethod() } })
       .wait({
-        timeout: 120000,
+        timeout: AZTEC_WAIT_TIMEOUT,
       })
 
     return receipt.txHash.toString()
@@ -460,7 +441,7 @@ export class Bridge {
   }
 
   async #finalizeForwardToL2(details: ForwardDetails): Promise<Hex> {
-    const { chainForwarder, chainIn, chainOut, orderId, type, fillerData } = details
+    const { chainForwarder, chainIn, chainOut, fillerAddress, orderId, type } = details
     if (!chainForwarder) throw new Error("You must specify a forwarder chain")
     const { gatewayIn } = this.#getGatewaysByChains(chainIn, chainOut)
     const forwarderAddress = forwarderAddresses[chainForwarder.id]
@@ -472,7 +453,7 @@ export class Bridge {
         : [
             Buffer.from(SETTLE_ORDER_TYPE.slice(2), "hex"),
             Buffer.from(orderId.slice(2), "hex"),
-            Buffer.from(fillerData!.slice(2), "hex"),
+            Buffer.from(padHex(fillerAddress!)!.slice(2), "hex"),
           ]
     const messageHash = sha256ToField(message)
 
@@ -537,7 +518,7 @@ export class Bridge {
   }
 
   async #forwardToL2(details: ForwardDetails): Promise<Hex> {
-    const { chainForwarder, chainIn, chainOut, fillerData, orderId, type } = details
+    const { chainForwarder, chainIn, chainOut, fillerAddress, orderId, type } = details
     if (!chainForwarder) throw new Error("You must specify a forwarder chain")
     const { gatewayIn } = this.#getGatewaysByChains(chainIn, chainOut)
     const rollupAddress = aztecRollupContractL1Addresses[chainForwarder.id]
@@ -550,7 +531,7 @@ export class Bridge {
         : [
             Buffer.from(SETTLE_ORDER_TYPE.slice(2), "hex"),
             Buffer.from(orderId.slice(2), "hex"),
-            Buffer.from(fillerData!.slice(2), "hex"),
+            Buffer.from(padHex(fillerAddress!).slice(2), "hex"),
           ]
 
     const messageHash = sha256ToField(message)
@@ -786,56 +767,41 @@ export class Bridge {
   }
 
   async #monitorEvmToAztecOrder(order: Order, orderId: Hex, callbacks?: OrderCallbacks) {
+    const { chainIn, chainOut } = order
+    const { onOrderFilled } = callbacks || {}
+    const { gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
+    await this.#maybeRegisterAztecGateway()
+
     if (this.azguardClient) {
-      await this.#monitorEvmToAztecOrderAzguard(order, orderId, callbacks)
-    } else {
-      await this.#monitorEvmToAztecOrderDefault(order, orderId, callbacks)
-    }
-  }
-
-  async #monitorEvmToAztecOrderAzguard(order: Order, orderId: Hex, callbacks?: OrderCallbacks): Promise<void> {
-    const { chainIn, chainOut } = order
-    const { onOrderFilled } = callbacks || {}
-    const { gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
-    // NOTE: Azguard currently doesn't expose the actively selected account.
-    // As a workaround, we default to using accounts[0], assuming it's the connected one.
-    const selectedAccount = this.azguardClient!.accounts[0]
-
-    await this.#maybeRegisterAztecGateway()
-
-    while (true) {
-      const [response] = await this.azguardClient!.execute([
-        {
-          kind: "simulate_views",
-          account: selectedAccount,
-          calls: [
-            {
-              kind: "call",
-              contract: gatewayOut,
-              method: "get_order_status",
-              args: [orderId],
-            },
-          ],
-        },
-      ])
-      if (response.status === "failed") throw new Error(response.error)
-      const status = parseInt(BigInt((response as OkResult<SimulateViewsResult>).result.encoded[0][0]).toString())
-      if (status === FILLED_PRIVATELY || status === FILLED) {
-        onOrderFilled?.({ orderId })
-        return
+      // NOTE: Azguard currently doesn't expose the actively selected account.
+      // As a workaround, we default to using accounts[0], assuming it's the connected one.
+      const selectedAccount = this.azguardClient!.accounts[0]
+      while (true) {
+        const [response] = await this.azguardClient!.execute([
+          {
+            kind: "simulate_views",
+            account: selectedAccount,
+            calls: [
+              {
+                kind: "call",
+                contract: gatewayOut,
+                method: "get_order_status",
+                args: [orderId],
+              },
+            ],
+          },
+        ])
+        if (response.status === "failed") throw new Error(response.error)
+        const status = parseInt(BigInt((response as OkResult<SimulateViewsResult>).result.encoded[0][0]).toString())
+        if (status === FILLED_PRIVATELY || status === FILLED) {
+          onOrderFilled?.({ orderId })
+          return
+        }
+        await sleep(3000)
       }
-      await sleep(3000)
     }
-  }
 
-  async #monitorEvmToAztecOrderDefault(order: Order, orderId: Hex, callbacks?: OrderCallbacks): Promise<void> {
-    const { chainIn, chainOut } = order
-    const { onOrderFilled } = callbacks || {}
-    const { gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
     const wallet = await this.#getAztecWallet!()
-
-    await this.#maybeRegisterAztecGateway()
-
     while (true) {
       const gateway = await AztecGateway7683Contract.at(AztecAddress.fromString(gatewayOut), wallet)
       const status = parseInt(await gateway.methods.get_order_status(Fr.fromString(orderId)).simulate())
@@ -870,8 +836,158 @@ export class Bridge {
   }
 
   async #openAztecToEvmOrder(order: Order, callbacks?: OrderCallbacks): Promise<OrderResult> {
-    if (this.azguardClient) return this.#aztecToEvmAzguard(order, callbacks)
-    return this.#aztecToEvmDefault(order, callbacks)
+    const { chainOut, mode, data, amountIn, amountOut, tokenIn, tokenOut, chainIn, recipient } = order
+    const { gatewayIn, gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
+    const fillDeadline = order.fillDeadline ?? 2 ** 32 - 1
+    const nonce = Fr.random()
+    const isPrivate = mode.includes("private")
+    const baseOrderData = {
+      recipient: padHex(recipient),
+      inputToken: padHex(tokenIn),
+      outputToken: padHex(tokenOut),
+      amountIn,
+      amountOut,
+      senderNonce: nonce.toBigInt(),
+      originDomain: chainIn.id,
+      destinationDomain: chainOut.id,
+      destinationSettler: padHex(gatewayOut),
+      fillDeadline,
+      orderType: this.#getOrderType(mode),
+      data: data || padHex("0x"),
+    }
+    await this.#maybeRegisterAztecGateway()
+
+    let orderOpenedReceipt
+    if (this.azguardClient) {
+      // NOTE: Azguard currently doesn't expose the actively selected account.
+      // As a workaround, we default to using accounts[0], assuming it's the connected one.
+      const selectedAccount = this.azguardClient!.accounts[0]
+
+      const orderDataEncoder = new OrderDataEncoder({
+        ...baseOrderData,
+        sender: isPrivate ? PRIVATE_SENDER : getAztecAddressFromAzguardAccount(selectedAccount),
+      })
+
+      const [, response] = await this.azguardClient!.execute([
+        {
+          kind: "register_contract",
+          chain: `aztec:11155111`,
+          address: tokenIn,
+          artifact: TokenContractArtifact,
+        },
+        {
+          kind: "send_transaction",
+          account: selectedAccount,
+          actions: [
+            {
+              kind: isPrivate ? "add_private_authwit" : "add_public_authwit",
+              content: {
+                kind: "call",
+                caller: gatewayIn,
+                contract: tokenIn,
+                method: isPrivate ? "transfer_to_public" : "transfer_in_public",
+                args: [getAztecAddressFromAzguardAccount(selectedAccount), gatewayIn, amountIn, nonce],
+              },
+            },
+            {
+              kind: "call",
+              contract: gatewayIn,
+              method: isPrivate ? "open_private" : "open",
+              args: [
+                {
+                  fill_deadline: fillDeadline,
+                  order_data: hexToUintArray(orderDataEncoder.encode()),
+                  order_data_type: hexToUintArray(ORDER_DATA_TYPE),
+                },
+              ],
+            },
+          ],
+        },
+      ])
+      if (response.status === "failed") throw new Error(response.error)
+      const orderOpenedTxHash = (response as OkResult<SendTransactionResult>).result as Hex
+
+      const waitForReceipt = async (txHash: string): Promise<TxReceipt> => {
+        while (true) {
+          const receipt = await this.aztecNode.getTxReceipt(TxHash.fromString(txHash))
+          if (receipt.status === "success") return receipt
+          if (receipt.status === "pending") {
+            await sleep(5000)
+            continue
+          }
+          throw new Error("Aztec transaction failed")
+        }
+      }
+      orderOpenedReceipt = await waitForReceipt(orderOpenedTxHash)
+    } else {
+      const wallet = await this.#getAztecWallet()
+      await this.aztecPxe?.registerContract({
+        instance: (await this.aztecNode.getContract(AztecAddress.fromString(tokenIn)))!,
+        artifact: TokenContractArtifact,
+      })
+      const orderDataEncoder = new OrderDataEncoder({
+        ...baseOrderData,
+        sender: isPrivate ? PRIVATE_SENDER : wallet.getAddress().toString(),
+      })
+
+      const gateway = await AztecGateway7683Contract.at(AztecAddress.fromString(gatewayIn), wallet)
+      const token = await TokenContract.at(AztecAddress.fromString(tokenIn), wallet)
+      let witness
+      if (isPrivate) {
+        witness = await wallet.createAuthWit({
+          caller: AztecAddress.fromString(gatewayIn),
+          action: token.methods.transfer_to_public(
+            wallet.getAddress(),
+            AztecAddress.fromString(gatewayIn),
+            amountIn,
+            nonce,
+          ),
+        })
+      } else {
+        await (
+          await wallet.setPublicAuthWit(
+            {
+              caller: AztecAddress.fromString(gatewayIn),
+              action: token.methods.transfer_in_public(
+                wallet.getAddress(),
+                AztecAddress.fromString(gatewayIn),
+                amountIn,
+                nonce,
+              ),
+            },
+            true,
+          )
+        )
+          .send({ fee: { paymentMethod: await getSponsporedFeePaymentMethod() } })
+          .wait({
+            timeout: AZTEC_WAIT_TIMEOUT,
+          })
+      }
+
+      orderOpenedReceipt = await gateway.methods[isPrivate ? "open_private" : "open"]({
+        fill_deadline: fillDeadline,
+        order_data: hexToUintArray(orderDataEncoder.encode()),
+        order_data_type: hexToUintArray(ORDER_DATA_TYPE),
+      })
+        .with({
+          authWitnesses: witness ? [witness] : [],
+        })
+        .send({ fee: { paymentMethod: await getSponsporedFeePaymentMethod() } })
+        .wait({
+          timeout: AZTEC_WAIT_TIMEOUT,
+        })
+    }
+
+    const { transactionHash: orderFilledTxHash, resolvedOrder } = await this.#monitorAztecToEvmOrder(
+      order,
+      orderOpenedReceipt,
+      callbacks,
+    )
+    return {
+      orderOpenedTxHash: orderOpenedReceipt.txHash.toString(),
+      orderFilledTxHash,
+      resolvedOrder,
+    }
   }
 
   async #openEvmToAztecOrder(order: Order, callbacks?: OrderCallbacks): Promise<OrderResult> {
@@ -885,7 +1001,7 @@ export class Bridge {
     const secret = isPrivate ? Fr.random() : null
     const { walletClient, address: sender } = await this.#getEvmWalletClientAndAddress(chainIn as Chain)
 
-    const orderData = new OrderData({
+    const orderData: OrderData = {
       sender: padHex(sender),
       recipient: secret ? (await poseidon2Hash([secret])).toString() : padHex(recipient),
       inputToken: padHex(tokenIn),
@@ -899,19 +1015,18 @@ export class Bridge {
       fillDeadline,
       orderType: isPrivate ? PRIVATE_ORDER : PUBLIC_ORDER,
       data: data || padHex("0x"),
-    })
+    }
+    const orderDataEncoder = new OrderDataEncoder(orderData)
 
     const evmClient = createClient({
       chain: chainIn as Chain,
       transport: http(),
     })
-    const evmPublicClient = createPublicClient({
+    const accountNonce = await createPublicClient({
       chain: chainIn as Chain,
       transport: http(),
-    })
-
-    const accountNonce = await evmPublicClient.getTransactionCount({
-      address: walletClient.account!.address,
+    }).getTransactionCount({
+      address: this.evmPrivateKey ? walletClient.account!.address : sender,
     })
     let txHash = await walletClient.writeContract({
       abi: erc20Abi,
@@ -930,7 +1045,7 @@ export class Bridge {
       args: [
         {
           fillDeadline,
-          orderData: orderData.encode(),
+          orderData: orderDataEncoder.encode(),
           orderDataType: ORDER_DATA_TYPE,
         },
       ],
@@ -1063,7 +1178,7 @@ export class Bridge {
               kind: "call",
               contract: gatewayOut,
               method: "refund",
-              args: [Array.from(hexToBytes(orderId)), Array.from(hexToBytes(orderData))],
+              args: [hexToUintArray(orderId), hexToUintArray(orderData)],
             },
           ],
         },
@@ -1074,14 +1189,14 @@ export class Bridge {
       const wallet = await this.#getAztecWallet()
       const gateway = await AztecGateway7683Contract.at(AztecAddress.fromString(gatewayOut), wallet)
       const receipt = await gateway.methods
-        .refund(Array.from(hexToBytes(orderId)), Array.from(hexToBytes(orderData)))
+        .refund(hexToUintArray(orderId), hexToUintArray(orderData))
         .send({
           fee: {
             paymentMethod: await getSponsporedFeePaymentMethod(),
           },
         })
         .wait({
-          timeout: 120000,
+          timeout: AZTEC_WAIT_TIMEOUT,
         })
 
       return receipt.txHash.toString()

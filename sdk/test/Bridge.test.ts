@@ -13,6 +13,8 @@ import { TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
 
 import { Bridge } from "../src"
 import { aztecSepolia } from "../src/constants"
+import { ResolvedOrder } from "../src/types"
+import { OrderDataEncoder } from "../src/utils"
 
 const WETH_ON_AZTEC_SEPOLIA_ADDRESS = "0x143c799188d6881bff72012bebb100d19b51ce0c90b378bfa3ba57498b5ddeeb"
 const WETH_ON_BASE_SEPOLIA_ADDRESS = "0x1BDD24840e119DC2602dCC587Dd182812427A5Cc"
@@ -232,6 +234,42 @@ describe("Bridge", () => {
       })
       expect(isHex(txHash)).toBe(true)
     })
+
+    it("should be able to open a private order from Aztec to Base and fill it", async () => {
+      const { aztecPxe, aztecNode } = await setup()
+      const bridge = new Bridge({
+        evmPrivateKey: process.env.EVM_PK as Hex,
+        aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
+        aztecKeySalt: process.env.AZTEC_KEY_SALT as Hex,
+        aztecPxe,
+        aztecNode,
+      })
+      const openOrder = (): Promise<{ orderId: Hex; resolvedOrder: ResolvedOrder }> =>
+        new Promise(async (resolve) => {
+          bridge.openOrder(
+            {
+              chainIn: aztecSepolia as Chain,
+              chainOut: baseSepolia,
+              amountIn: 1n,
+              amountOut: 1n,
+              tokenIn: WETH_ON_AZTEC_SEPOLIA_ADDRESS,
+              tokenOut: WETH_ON_BASE_SEPOLIA_ADDRESS,
+              mode: "private",
+              data: padHex("0x"),
+              recipient: padHex(privateKeyToAddress(process.env.EVM_PK as Hex)),
+            },
+            {
+              onOrderOpened: ({ orderId, resolvedOrder }) => resolve({ orderId, resolvedOrder }),
+            },
+          )
+        })
+      const { orderId, resolvedOrder } = await openOrder()
+      const txHash = await bridge.fillOrder({
+        orderId,
+        orderData: OrderDataEncoder.decode(resolvedOrder.fillInstructions[0].originData),
+      })
+      expect(isHex(txHash)).toBe(true)
+    })
   })
 
   describe("Base -> Aztec", () => {
@@ -367,6 +405,90 @@ describe("Bridge", () => {
         orderId,
         chainIn: baseSepolia,
         chainOut: aztecSepolia as Chain,
+      })
+      expect(isHex(txHash)).toBe(true)
+    })
+
+    it("should be able to open a private order from Base to Aztec and then fill it", async () => {
+      const { aztecPxe, aztecNode } = await setup()
+      const bridge = new Bridge({
+        evmPrivateKey: process.env.EVM_PK as Hex,
+        aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
+        aztecKeySalt: process.env.AZTEC_KEY_SALT as Hex,
+        aztecPxe,
+        aztecNode,
+      })
+
+      await aztecPxe.registerContract({
+        instance: (await aztecNode.getContract(AztecAddress.fromString(WETH_ON_AZTEC_SEPOLIA_ADDRESS)))!,
+        artifact: TokenContractArtifact,
+      })
+
+      const openOrder = (): Promise<{ orderId: Hex; resolvedOrder: ResolvedOrder }> =>
+        new Promise(async (resolve) => {
+          bridge.openOrder(
+            {
+              chainIn: baseSepolia,
+              chainOut: aztecSepolia as Chain,
+              amountIn: 1n,
+              amountOut: 1n,
+              tokenIn: WETH_ON_BASE_SEPOLIA_ADDRESS,
+              tokenOut: WETH_ON_AZTEC_SEPOLIA_ADDRESS,
+              mode: "private",
+              data: padHex("0x"),
+              recipient: padHex(privateKeyToAddress(process.env.EVM_PK as Hex)),
+            },
+            {
+              onOrderOpened: ({ orderId, resolvedOrder }) => resolve({ orderId, resolvedOrder }),
+            },
+          )
+        })
+      const { orderId, resolvedOrder } = await openOrder()
+      const txHash = await bridge.fillOrder({
+        orderId,
+        orderData: OrderDataEncoder.decode(resolvedOrder.fillInstructions[0].originData),
+      })
+      expect(isHex(txHash)).toBe(true)
+    })
+
+    it("should be able to open a private order from Base to Aztec and then fill it", async () => {
+      const { aztecPxe, aztecNode } = await setup()
+      const bridge = new Bridge({
+        evmPrivateKey: process.env.EVM_PK as Hex,
+        aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
+        aztecKeySalt: process.env.AZTEC_KEY_SALT as Hex,
+        aztecPxe,
+        aztecNode,
+      })
+
+      await aztecPxe.registerContract({
+        instance: (await aztecNode.getContract(AztecAddress.fromString(WETH_ON_AZTEC_SEPOLIA_ADDRESS)))!,
+        artifact: TokenContractArtifact,
+      })
+
+      const openOrder = (): Promise<{ orderId: Hex; resolvedOrder: ResolvedOrder }> =>
+        new Promise(async (resolve) => {
+          bridge.openOrder(
+            {
+              chainIn: baseSepolia,
+              chainOut: aztecSepolia as Chain,
+              amountIn: 1n,
+              amountOut: 1n,
+              tokenIn: WETH_ON_BASE_SEPOLIA_ADDRESS,
+              tokenOut: WETH_ON_AZTEC_SEPOLIA_ADDRESS,
+              mode: "public",
+              data: padHex("0x"),
+              recipient: padHex(privateKeyToAddress(process.env.EVM_PK as Hex)),
+            },
+            {
+              onOrderOpened: ({ orderId, resolvedOrder }) => resolve({ orderId, resolvedOrder }),
+            },
+          )
+        })
+      const { orderId, resolvedOrder } = await openOrder()
+      const txHash = await bridge.fillOrder({
+        orderId,
+        orderData: OrderDataEncoder.decode(resolvedOrder.fillInstructions[0].originData),
       })
       expect(isHex(txHash)).toBe(true)
     })
