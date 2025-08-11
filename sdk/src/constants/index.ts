@@ -1,6 +1,8 @@
 import { baseSepolia, sepolia } from "viem/chains"
 import { Hex, padHex } from "viem"
 
+import type { InternalChain } from "../types"
+
 export const ORDER_DATA_TYPE = "0xf00c3bf60c73eb97097f1c9835537da014e0b755fe94b25d7ac8401df66716a0"
 export const REFUND_ORDER_TYPE = "0x66ad36d8ca106da96563556152aba4b916ec696ecdd08a3e5ed368f4e473a538"
 export const SETTLE_ORDER_TYPE = "0x191ea776bd6e0cd56a6d44ba4aea2fec468b4a0b4c1d880d4025929eeb615d0d"
@@ -16,9 +18,17 @@ export const AZTEC_VERSION = 3924331020
 export const FORWARDER_SETTLE_ORDER_SLOT = 2n
 export const FORWARDER_REFUNDED_ORDERS_SLOT = 3n
 
-export const aztecSepolia = {
+export const aztecSepolia: InternalChain = {
   id: 999999,
   name: "Aztec Sepolia",
+  rpcUrls: {
+    "aztec-alpha": {
+      http: ["https://aztec-alpha-testnet-fullnode.zkv.xyz"],
+    },
+    default: {
+      http: ["https://aztec-alpha-testnet-fullnode.zkv.xyz"],
+    },
+  },
 }
 
 export const gatewayAddresses: Record<number, Hex> = {

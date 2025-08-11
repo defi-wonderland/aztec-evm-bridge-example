@@ -15,7 +15,17 @@ import {
   padHex,
 } from "viem"
 import * as evmChains from "viem/chains"
-import { AztecAddress, Fr, PXE, AztecNode, TxHash, sleep, TxReceipt, EthAddress } from "@aztec/aztec.js"
+import {
+  AztecAddress,
+  Fr,
+  PXE,
+  AztecNode,
+  TxHash,
+  sleep,
+  TxReceipt,
+  EthAddress,
+  createAztecNodeClient,
+} from "@aztec/aztec.js"
 import { AzguardClient } from "@azguardwallet/client"
 import { OkResult, SendTransactionResult, SimulateViewsResult } from "@azguardwallet/types"
 import { deriveSigningKey } from "@aztec/stdlib/keys"
@@ -85,7 +95,6 @@ const AZTEC_WAIT_TIMEOUT = 120000
 
 export class Bridge {
   azguardClient?: AzguardClient
-  aztecNode: AztecNode
   aztecPxe?: PXE
   aztecKeySalt?: Hex
   aztecSecretKey?: Hex
@@ -96,16 +105,7 @@ export class Bridge {
   #aztecGatewayRegistered = false
 
   constructor(configs: BridgeConfigs) {
-    const {
-      azguardClient,
-      aztecNode,
-      aztecPxe,
-      aztecKeySalt,
-      aztecSecretKey,
-      beaconApiUrl,
-      evmPrivateKey,
-      evmProvider,
-    } = configs
+    const { azguardClient, aztecPxe, aztecKeySalt, aztecSecretKey, beaconApiUrl, evmPrivateKey, evmProvider } = configs
 
     if (!aztecSecretKey && !aztecKeySalt && !azguardClient) {
       throw new Error("You must specify aztecSecretKey and aztecKeySalt or azguardClient")
@@ -128,7 +128,6 @@ export class Bridge {
     }
 
     this.azguardClient = azguardClient
-    this.aztecNode = aztecNode
     this.aztecPxe = aztecPxe
     this.aztecKeySalt = aztecKeySalt
     this.aztecSecretKey = aztecSecretKey
@@ -696,7 +695,7 @@ export class Bridge {
     // TODO: understand why if i use fromBlock and toBlock i always receive the penultimante log.
     // Basically i never receive the last one even if block numbers are up to date
     const gateway = gatewayAddresses[aztecSepolia.id]
-    const { logs } = await this.aztecNode.getPublicLogs({
+    const { logs } = await createAztecNodeClient(aztecSepolia.rpcUrls.default.http[0]).getPublicLogs({
       contractAddress: AztecAddress.fromString(gateway),
     })
     const parsedLogs = logs.map(({ log }) => parseFilledLog(log.fields))
@@ -707,7 +706,7 @@ export class Bridge {
     // TODO: understand why if i use fromBlock and toBlock i always receive the penultimante log.
     // Basically i never receive the last one even if block numbers are up to date
     const gateway = gatewayAddresses[aztecSepolia.id]
-    const { logs } = await this.aztecNode.getPublicLogs({
+    const { logs } = await createAztecNodeClient(aztecSepolia.rpcUrls.default.http[0]).getPublicLogs({
       contractAddress: AztecAddress.fromString(gateway),
     })
     const parsedOpenLogs = getResolvedOrderByAztecLogs(logs)
@@ -723,7 +722,8 @@ export class Bridge {
     const { onOrderOpened, onOrderFilled } = callbacks || {}
     const { gatewayIn, gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
 
-    const { logs } = await this.aztecNode.getPublicLogs({
+    if (chainIn.id !== aztecSepolia.id) throw new Error("Chain in is not Aztec")
+    const { logs } = await createAztecNodeClient(aztecSepolia.rpcUrls.default.http[0]).getPublicLogs({
       fromBlock: receipt.blockNumber! - 1,
       toBlock: receipt.blockNumber! + 1,
       contractAddress: AztecAddress.fromString(gatewayIn),
@@ -826,7 +826,9 @@ export class Bridge {
         ])
       } else {
         await this.aztecPxe?.registerContract({
-          instance: (await this.aztecNode?.getContract(AztecAddress.fromString(gateway)))!,
+          instance: (await createAztecNodeClient(aztecSepolia.rpcUrls.default.http[0]).getContract(
+            AztecAddress.fromString(gateway),
+          ))!,
           artifact: AztecGateway7683ContractArtifact,
         })
       }
@@ -908,7 +910,9 @@ export class Bridge {
 
       const waitForReceipt = async (txHash: string): Promise<TxReceipt> => {
         while (true) {
-          const receipt = await this.aztecNode.getTxReceipt(TxHash.fromString(txHash))
+          const receipt = await createAztecNodeClient(aztecSepolia.rpcUrls.default.http[0]).getTxReceipt(
+            TxHash.fromString(txHash),
+          )
           if (receipt.status === "success") return receipt
           if (receipt.status === "pending") {
             await sleep(5000)
@@ -921,7 +925,9 @@ export class Bridge {
     } else {
       const wallet = await this.#getAztecWallet()
       await this.aztecPxe?.registerContract({
-        instance: (await this.aztecNode.getContract(AztecAddress.fromString(tokenIn)))!,
+        instance: (await createAztecNodeClient(aztecSepolia.rpcUrls.default.http[0]).getContract(
+          AztecAddress.fromString(tokenIn),
+        ))!,
         artifact: TokenContractArtifact,
       })
       const orderDataEncoder = new OrderDataEncoder({

@@ -49,7 +49,6 @@ const bridge = new Bridge({
   aztecSecretKey: "0x...",
   aztecKeySalt: "0x...",
   aztecPxe: pxe,
-  aztecNode: node,
 })
 bridge
   .openOrder({

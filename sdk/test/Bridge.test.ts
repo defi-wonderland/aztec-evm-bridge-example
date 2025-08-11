@@ -13,7 +13,7 @@ import { TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
 
 import { Bridge } from "../src"
 import { aztecSepolia } from "../src/constants"
-import { ResolvedOrder } from "../src/types"
+import { InternalChain, ResolvedOrder } from "../src/types"
 import { OrderDataEncoder } from "../src/utils"
 
 const WETH_ON_AZTEC_SEPOLIA_ADDRESS = "0x143c799188d6881bff72012bebb100d19b51ce0c90b378bfa3ba57498b5ddeeb"
@@ -66,7 +66,6 @@ describe("Bridge", () => {
       const createBridge = () =>
         new Bridge({
           evmPrivateKey: process.env.EVM_PK as Hex,
-          aztecNode,
         })
       expect(createBridge).to.throw("You must specify aztecSecretKey and aztecKeySalt or azguardClient")
     })
@@ -77,7 +76,6 @@ describe("Bridge", () => {
         new Bridge({
           aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
           aztecKeySalt: process.env.AZTEC_KEY_SALT as Hex,
-          aztecNode,
           evmPrivateKey: process.env.EVM_PK as Hex,
           evmProvider: {},
         })
@@ -85,24 +83,21 @@ describe("Bridge", () => {
     })
 
     it("cannot initialize bridge using aztecSecretKey, aztecKeySalt, aztecPxe, aztecNode and azguardClient", async () => {
-      const { aztecPxe, aztecNode } = await setup()
+      const { aztecPxe } = await setup()
       const createBridge = () =>
         new Bridge({
           evmPrivateKey: process.env.EVM_PK as Hex,
           aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
           aztecKeySalt: process.env.AZTEC_KEY_SALT as Hex,
           aztecPxe,
-          aztecNode,
           azguardClient: {} as AzguardClient,
         })
       expect(createBridge).to.throw("Cannot specify both aztecSecretKey, aztecKeySalt, aztecPxe and azguardClient")
     })
 
     it("cannot initialize bridge using aztecSecretKey and aztecNode without aztecKeySalt", async () => {
-      const { aztecNode } = await setup()
       const createBridge = () =>
         new Bridge({
-          aztecNode,
           aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
           evmPrivateKey: process.env.EVM_PK as Hex,
         })
@@ -110,10 +105,8 @@ describe("Bridge", () => {
     })
 
     it("cannot initialize bridge using aztecSecretKey, aztecKeySalt and aztecNode without aztecKeyPxe", async () => {
-      const { aztecNode } = await setup()
       const createBridge = () =>
         new Bridge({
-          aztecNode,
           aztecKeySalt: process.env.AZTEC_KEY_SALT as Hex,
           aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
           evmPrivateKey: process.env.EVM_PK as Hex,
@@ -136,7 +129,6 @@ describe("Bridge", () => {
         aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
         aztecKeySalt: process.env.AZTEC_KEY_SALT as Hex,
         aztecPxe,
-        aztecNode,
       })
       let onOrderOpenedCalled = false
       let onOrderFilledCalled = false
@@ -174,7 +166,6 @@ describe("Bridge", () => {
         aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
         aztecKeySalt: process.env.AZTEC_KEY_SALT as Hex,
         aztecPxe,
-        aztecNode,
       })
       const result = await bridge.openOrder(
         {
@@ -204,7 +195,6 @@ describe("Bridge", () => {
         aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
         aztecKeySalt: process.env.AZTEC_KEY_SALT as Hex,
         aztecPxe,
-        aztecNode,
       })
       const openOrder = (): Promise<Hex> =>
         new Promise(async (resolve) => {
@@ -242,7 +232,6 @@ describe("Bridge", () => {
         aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
         aztecKeySalt: process.env.AZTEC_KEY_SALT as Hex,
         aztecPxe,
-        aztecNode,
       })
       const openOrder = (): Promise<{ orderId: Hex; resolvedOrder: ResolvedOrder }> =>
         new Promise(async (resolve) => {
@@ -280,7 +269,6 @@ describe("Bridge", () => {
         aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
         aztecKeySalt: process.env.AZTEC_KEY_SALT as Hex,
         aztecPxe,
-        aztecNode,
       })
 
       await aztecPxe.registerContract({
@@ -334,7 +322,6 @@ describe("Bridge", () => {
         aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
         aztecKeySalt: process.env.AZTEC_KEY_SALT as Hex,
         aztecPxe,
-        aztecNode,
       })
 
       let onOrderOpenedCalled = false
@@ -372,7 +359,6 @@ describe("Bridge", () => {
         aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
         aztecKeySalt: process.env.AZTEC_KEY_SALT as Hex,
         aztecPxe,
-        aztecNode,
       })
 
       await aztecPxe.registerContract({
@@ -416,7 +402,6 @@ describe("Bridge", () => {
         aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
         aztecKeySalt: process.env.AZTEC_KEY_SALT as Hex,
         aztecPxe,
-        aztecNode,
       })
 
       await aztecPxe.registerContract({
@@ -458,7 +443,6 @@ describe("Bridge", () => {
         aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
         aztecKeySalt: process.env.AZTEC_KEY_SALT as Hex,
         aztecPxe,
-        aztecNode,
       })
 
       await aztecPxe.registerContract({

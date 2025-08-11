@@ -1,5 +1,5 @@
 import { Chain, Hex } from "viem"
-import { PXE, AztecNode } from "@aztec/aztec.js"
+import { PXE } from "@aztec/aztec.js"
 import { AzguardClient } from "@azguardwallet/client"
 
 export type FilledLog = {
@@ -35,9 +35,24 @@ export interface FillInstruction {
 export type Mode = "private" | "public"
 export type SwapMode = Mode | "privateWithHook" | "publicWithHook"
 
+export type InternalChain =
+  | Chain
+  | {
+      id: number
+      name: string
+      rpcUrls: {
+        [key: string]: {
+          http: readonly string[]
+        }
+        default: {
+          http: readonly string[]
+        }
+      }
+    }
+
 export interface Order {
-  chainIn: Chain | { id: number; name: string }
-  chainOut: Chain | { id: number; name: string }
+  chainIn: InternalChain
+  chainOut: InternalChain
   amountIn: bigint
   amountOut: bigint
   tokenIn: Hex
@@ -71,8 +86,8 @@ export interface FillOrderDetails {
 
 export interface RefundOrderDetails {
   orderId: Hex
-  chainIn: Chain | { id: number; name: string }
-  chainOut: Chain | { id: number; name: string }
+  chainIn: InternalChain
+  chainOut: InternalChain
   chainForwarder?: Chain
 }
 
@@ -102,7 +117,6 @@ export interface OrderCallbacks {
 
 export interface BridgeConfigs {
   azguardClient?: AzguardClient
-  aztecNode: AztecNode
   aztecPxe?: PXE
   aztecKeySalt?: Hex
   aztecSecretKey?: Hex
