@@ -11,10 +11,7 @@ import { deriveSigningKey } from "@aztec/stdlib/keys"
 import { getSchnorrAccount } from "@aztec/accounts/schnorr"
 import { TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
 
-import { Bridge } from "../src"
-import { aztecSepolia } from "../src/constants"
-import { ResolvedOrder } from "../src/types"
-import { OrderDataEncoder } from "../src/utils"
+import { Bridge, aztecSepolia, ResolvedOrder, OrderDataEncoder } from "../src"
 
 const WETH_ON_AZTEC_SEPOLIA_ADDRESS = "0x143c799188d6881bff72012bebb100d19b51ce0c90b378bfa3ba57498b5ddeeb"
 const WETH_ON_BASE_SEPOLIA_ADDRESS = "0x1BDD24840e119DC2602dCC587Dd182812427A5Cc"
