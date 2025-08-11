@@ -19,11 +19,11 @@
     "build": "tsup src/index.ts --format esm,cjs --dts",
     "clean": "rm -rf dist",
     "format": "prettier --write \"**/*.{json,ts}\"",
-    "test": "vitest",
-    "test:watch": "vitest --watch",
-    "test:coverage": "vitest run --coverage",
     "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "test": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest --watch"
   },
   "devDependencies": {
     "@azguardwallet/types": "^0.4.1",
