@@ -45,6 +45,7 @@ import {
   FILLED,
   FILLED_PRIVATELY,
   FORWARDER_REFUNDED_ORDERS_SLOT,
+  FORWARDER_SETTLE_ORDER_SLOT,
   forwarderAddresses,
   gatewayAddresses,
   OPENED,
@@ -55,6 +56,7 @@ import {
   PUBLIC_ORDER,
   PUBLIC_ORDER_WITH_HOOK,
   REFUND_ORDER_TYPE,
+  SETTLE_ORDER_TYPE,
 } from "./constants"
 import {
   AztecGateway7683Contract,
@@ -67,11 +69,13 @@ import forwarderAbi from "./utils/abi/forwarder"
 import type {
   BridgeConfigs,
   FilledLog,
+  ForwardDetails,
   Order,
   OrderCallbacks,
   OrderResult,
   RefundOrderDetails,
   ResolvedOrder,
+  SettleOrderDetails,
 } from "./types"
 
 export class Bridge {
@@ -135,22 +139,49 @@ export class Bridge {
     return this.#claimEvmToAztecPrivateOrderDefault(orderId, secret)
   }
 
+  async finalizeForwardRefundOrder(details: RefundOrderDetails): Promise<Hex> {
+    const { chainIn, chainOut } = details
+    if (chainIn.id === aztecSepolia.id) {
+      return this.#finalizeForwardToL2({
+        ...details,
+        type: "forwardRefundToL2",
+      })
+    } else if (chainOut.id === aztecSepolia.id) {
+      return this.#finalizeForwardRefundOrderToAztec(details)
+    }
+    throw new Error("Neither chain is Aztec")
+  }
+
+  async finalizeForwardSettleOrder(details: SettleOrderDetails): Promise<Hex> {
+    const { chainIn, chainOut } = details
+    if (chainIn.id === aztecSepolia.id) {
+      return this.#finalizeForwardToL2({
+        ...details,
+        type: "forwardSettleToL2",
+      })
+    } else if (chainOut.id === aztecSepolia.id) {
+      return this.#finalizeForwardSettleOrderToAztec(details)
+    }
+    throw new Error("Neither chain is Aztec")
+  }
+
   async forwardRefundOrder(details: RefundOrderDetails): Promise<Hex> {
     const { chainIn, chainOut } = details
     if (chainIn.id === aztecSepolia.id) {
-      return this.#forwardRefundOrderToL2(details)
+      return this.#forwardToL2({ ...details, type: "forwardRefundToL2" })
     } else if (chainOut.id === aztecSepolia.id) {
       return this.#forwardRefundOrderToAztec(details)
     }
     throw new Error("Neither chain is Aztec")
   }
 
-  async finalizeRefundOrder(details: RefundOrderDetails): Promise<Hex> {
+  async forwardSettleOrder(details: SettleOrderDetails): Promise<Hex> {
     const { chainIn, chainOut } = details
     if (chainIn.id === aztecSepolia.id) {
-      return this.#finalizeRefundOrderToL2(details)
+      // TODO: add filler data
+      return this.#forwardToL2({ ...details, type: "forwardSettleToL2" })
     } else if (chainOut.id === aztecSepolia.id) {
-      return this.#finalizeRefundOrderToAztec(details)
+      return this.#forwardSettleOrderToAztec(details)
     }
     throw new Error("Neither chain is Aztec")
   }
@@ -420,18 +451,29 @@ export class Bridge {
     return receipt.txHash.toString()
   }
 
-  async #finalizeRefundOrderToAztec(details: RefundOrderDetails): Promise<Hex> {
+  async #finalizeForwardRefundOrderToAztec(details: RefundOrderDetails): Promise<Hex> {
     throw new Error("Not implemented")
   }
 
-  async #finalizeRefundOrderToL2(details: RefundOrderDetails): Promise<Hex> {
-    const { chainForwarder, chainIn, chainOut, orderId } = details
+  async #finalizeForwardSettleOrderToAztec(details: SettleOrderDetails): Promise<Hex> {
+    throw new Error("Not implemented")
+  }
+
+  async #finalizeForwardToL2(details: ForwardDetails): Promise<Hex> {
+    const { chainForwarder, chainIn, chainOut, orderId, type, fillerData } = details
     if (!chainForwarder) throw new Error("You must specify a forwarder chain")
     const { gatewayIn } = this.#getGatewaysByChains(chainIn, chainOut)
     const forwarderAddress = forwarderAddresses[chainForwarder.id]
     if (forwarderAddress) throw new Error("Forwarder chain not supported")
 
-    const message = [Buffer.from(REFUND_ORDER_TYPE.slice(2), "hex"), Buffer.from(orderId.slice(2), "hex")]
+    const message =
+      type === "forwardRefundToL2"
+        ? [Buffer.from(REFUND_ORDER_TYPE.slice(2), "hex"), Buffer.from(orderId.slice(2), "hex")]
+        : [
+            Buffer.from(SETTLE_ORDER_TYPE.slice(2), "hex"),
+            Buffer.from(orderId.slice(2), "hex"),
+            Buffer.from(fillerData!.slice(2), "hex"),
+          ]
     const messageHash = sha256ToField(message)
 
     const { parentBeaconBlockRoot: beaconRoot, timestamp: beaconOracleTimestamp } = await createPublicClient({
@@ -451,7 +493,10 @@ export class Bridge {
     const storageKey = keccak256(
       encodeAbiParameters(
         [{ type: "bytes32" }, { type: "uint256" }],
-        [messageHash.toString(), FORWARDER_REFUNDED_ORDERS_SLOT],
+        [
+          messageHash.toString(),
+          type === "forwardRefundToL2" ? FORWARDER_REFUNDED_ORDERS_SLOT : FORWARDER_SETTLE_ORDER_SLOT,
+        ],
       ),
     )
     const proof = await createPublicClient({
@@ -470,7 +515,7 @@ export class Bridge {
       storageProof: proof.storageProof[0]!.proof,
     }
     if (accountProofParameters.storageValue === "0x00") {
-      throw new Error(`Storage value not up to date yet for order ${orderId} or order refund not forwarded yet`)
+      throw new Error(`Storage value not up to date yet for order ${orderId} or order not forwarded yet`)
     }
 
     const stateRootParameters = {
@@ -487,19 +532,27 @@ export class Bridge {
       address: gatewayIn,
       args: [bytesToHex(Buffer.concat([...message])), stateRootParameters, accountProofParameters],
       chain: chainIn as Chain,
-      functionName: "refund",
+      functionName: type === "forwardRefundToL2" ? "refund" : "settle",
     })
   }
 
-  async #forwardRefundOrderToL2(details: RefundOrderDetails): Promise<Hex> {
-    const { orderId, chainIn, chainOut, chainForwarder } = details
+  async #forwardToL2(details: ForwardDetails): Promise<Hex> {
+    const { chainForwarder, chainIn, chainOut, fillerData, orderId, type } = details
     if (!chainForwarder) throw new Error("You must specify a forwarder chain")
     const { gatewayIn } = this.#getGatewaysByChains(chainIn, chainOut)
     const rollupAddress = aztecRollupContractL1Addresses[chainForwarder.id]
     const forwarderAddress = forwarderAddresses[chainForwarder.id]
     if (!rollupAddress || forwarderAddress) throw new Error("Forwarder chain not supported")
 
-    const message = [Buffer.from(REFUND_ORDER_TYPE.slice(2), "hex"), Buffer.from(orderId.slice(2), "hex")]
+    const message =
+      type === "forwardRefundToL2"
+        ? [Buffer.from(REFUND_ORDER_TYPE.slice(2), "hex"), Buffer.from(orderId.slice(2), "hex")]
+        : [
+            Buffer.from(SETTLE_ORDER_TYPE.slice(2), "hex"),
+            Buffer.from(orderId.slice(2), "hex"),
+            Buffer.from(fillerData!.slice(2), "hex"),
+          ]
+
     const messageHash = sha256ToField(message)
     const l2ToL1MessageHash = sha256ToField([
       Buffer.from(gatewayIn, "hex"),
@@ -510,7 +563,7 @@ export class Bridge {
     ])
 
     await this.#maybeRegisterAztecGateway()
-    const getOrderSettlementBlockNumber = async (): Promise<bigint> => {
+    const getRefundBlockNumber = async (): Promise<bigint> => {
       if (this.azguardClient) {
         const selectedAccount = this.azguardClient.accounts[0]
         const [response] = await this.azguardClient!.execute([
@@ -521,7 +574,8 @@ export class Bridge {
               {
                 kind: "call",
                 contract: gatewayIn,
-                method: "get_order_settlement_block_number",
+                method:
+                  type === "forwardRefundToL2" ? "get_order_refund_block_number" : "get_order_settlement_block_number",
                 args: [orderId],
               },
             ],
@@ -533,12 +587,12 @@ export class Bridge {
 
       const wallet = await this.#getAztecWallet()
       const gateway = await AztecGateway7683Contract.at(AztecAddress.fromString(gatewayIn), wallet)
-      return (await gateway.methods
-        .get_order_settlement_block_number(Fr.fromBufferReduce(Buffer.from(orderId.slice(2), "hex")))
-        .simulate()) as bigint
+      return (await gateway.methods[
+        type === "forwardRefundToL2" ? "get_order_refund_block_number" : "get_order_settlement_block_number"
+      ](Fr.fromBufferReduce(Buffer.from(orderId.slice(2), "hex"))).simulate()) as bigint
     }
 
-    const aztecOrderSettlementBlockNumber = await getOrderSettlementBlockNumber()
+    const aztecBlockNumber = await getRefundBlockNumber()
     const provenBlockNumber = (await createPublicClient({
       chain: chainForwarder,
       transport: http(),
@@ -548,14 +602,14 @@ export class Bridge {
       abi: rollupAbi,
       functionName: "getProvenBlockNumber",
     })) as bigint
-    if (aztecOrderSettlementBlockNumber > provenBlockNumber) {
+    if (aztecBlockNumber > provenBlockNumber) {
       throw new Error(
-        `cannot forward settlement to L2 for order ${orderId} because the corresponding block number ${aztecOrderSettlementBlockNumber} is > than the last proven ${provenBlockNumber}!`,
+        `cannot forward to L2 for order ${orderId} because the corresponding block number ${aztecBlockNumber} is > than the last proven ${provenBlockNumber}!`,
       )
     }
 
     const [l2ToL1MessageIndex, siblingPath] = await this.aztecPxe!.getL2ToL1MembershipWitness(
-      parseInt(aztecOrderSettlementBlockNumber.toString()),
+      parseInt(aztecBlockNumber.toString()),
       l2ToL1MessageHash,
     )
 
@@ -566,19 +620,17 @@ export class Bridge {
       abi: forwarderAbi,
       account: this.evmPrivateKey ? walletClient.account! : address,
       address: forwarderAddress,
-      args: [
-        l2ToL1Message,
-        bytesToHex(Buffer.concat([...message])),
-        aztecOrderSettlementBlockNumber,
-        l2ToL1MessageIndex,
-        path,
-      ],
+      args: [l2ToL1Message, bytesToHex(Buffer.concat([...message])), aztecBlockNumber, l2ToL1MessageIndex, path],
       chain: chainForwarder,
-      functionName: "forwardRefundToL2",
+      functionName: type === "forwardRefundToL2" ? "forwardRefundToL2" : "forwardSettleToL2",
     })
   }
 
   async #forwardRefundOrderToAztec(details: RefundOrderDetails): Promise<Hex> {
+    throw new Error("Not implemented")
+  }
+
+  async #forwardSettleOrderToAztec(details: SettleOrderDetails): Promise<Hex> {
     throw new Error("Not implemented")
   }
 

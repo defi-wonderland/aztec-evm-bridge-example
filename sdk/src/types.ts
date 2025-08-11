@@ -54,6 +54,13 @@ export interface RefundOrderDetails {
   chainForwarder?: Chain
 }
 
+export type SettleOrderDetails = RefundOrderDetails
+
+export type ForwardDetails = RefundOrderDetails & {
+  fillerData?: Hex
+  type: "forwardSettleToL2" | "forwardRefundToL2"
+}
+
 export interface OrderResult {
   orderOpenedTxHash: Hex
   // NOTE: on aztec we cannot get the filled transaction hash where a given log has been emitted

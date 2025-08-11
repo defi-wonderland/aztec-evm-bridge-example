@@ -3,6 +3,7 @@ import { Hex, padHex } from "viem"
 
 export const ORDER_DATA_TYPE = "0xf00c3bf60c73eb97097f1c9835537da014e0b755fe94b25d7ac8401df66716a0"
 export const REFUND_ORDER_TYPE = "0x66ad36d8ca106da96563556152aba4b916ec696ecdd08a3e5ed368f4e473a538"
+export const SETTLE_ORDER_TYPE = "0x191ea776bd6e0cd56a6d44ba4aea2fec468b4a0b4c1d880d4025929eeb615d0d"
 export const PUBLIC_ORDER = 0
 export const PRIVATE_ORDER = 1
 export const PUBLIC_ORDER_WITH_HOOK = 2
@@ -12,6 +13,7 @@ export const OPENED = 1
 export const FILLED = 2
 export const FILLED_PRIVATELY = 3
 export const AZTEC_VERSION = 3924331020
+export const FORWARDER_SETTLE_ORDER_SLOT = 2n
 export const FORWARDER_REFUNDED_ORDERS_SLOT = 3n
 
 export const aztecSepolia = {
@@ -20,7 +22,7 @@ export const aztecSepolia = {
 }
 
 export const gatewayAddresses: Record<number, Hex> = {
-  [aztecSepolia.id]: "0x1c48c2d7dca7291d2ab5935a684c160628be3a4a5a4ca670bcb4716233dc68cf",
+  [aztecSepolia.id]: "0x1bffdfe300ac79d18c3c86718ebf770b2142d5fba9a906e3a4cd0e9774623f3a",
   [baseSepolia.id]: "0xe91C15EF8cE69e7bd90a68E4aC576A242C84eAdF",
 }
 
