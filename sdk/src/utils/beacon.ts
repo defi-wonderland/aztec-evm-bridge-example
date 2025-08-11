@@ -2,7 +2,7 @@
 
 import { bytesToHex } from "viem"
 import { createProof, ProofType } from "@chainsafe/persistent-merkle-tree"
-const { ssz } = await import("@lodestar/types")
+import { ssz } from "@lodestar/types"
 const { BeaconBlock } = ssz.electra
 
 export const getExecutionStateRootProof = (block: any): { proof: string[]; leaf: string } => {
