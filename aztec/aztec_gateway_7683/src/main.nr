@@ -59,6 +59,7 @@ pub contract AztecGateway7683 {
         order_status: Map<Field, PublicMutable<Field, Context>, Context>,
         used_nonces: Map<AztecAddress, Map<Field, PublicMutable<bool, Context>, Context>, Context>,
         orders_settlement_block_numbers: Map<Field, PublicMutable<Field, Context>, Context>,
+        orders_refund_block_numbers: Map<Field, PublicMutable<Field, Context>, Context>,
     }
 
     #[public]
@@ -303,6 +304,12 @@ pub contract AztecGateway7683 {
 
     #[public]
     #[view]
+    fn get_order_refund_block_number(order_id: Field) -> Field {
+        storage.orders_refund_block_numbers.at(order_id).read()
+    }
+
+    #[public]
+    #[view]
     fn get_order_settlement_block_number(order_id: Field) -> Field {
         storage.orders_settlement_block_numbers.at(order_id).read()
     }
@@ -391,6 +398,7 @@ pub contract AztecGateway7683 {
         assert(order_data.id() == order_id, "Invalid id");
         assert(storage.order_status.at(order_id).read() == UNKNOWN, "Invalid status");
         assert(context.timestamp() as u32 > order_data.fill_deadline, "Order not expired");
+        storage.orders_refund_block_numbers.at(order_id).write(context.block_number() as Field);
         context.message_portal(
             storage.config.read().forwarder,
             _get_refund_content_hash(order_id_bytes),
