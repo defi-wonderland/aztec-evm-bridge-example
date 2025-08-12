@@ -434,7 +434,7 @@ export class Bridge {
     if (!chainForwarder) throw new Error("You must specify a forwarder chain")
     const { gatewayIn } = this.#getGatewaysByChains(chainIn, chainOut)
     const forwarderAddress = forwarderAddresses[chainForwarder.id]
-    if (forwarderAddress) throw new Error("Forwarder chain not supported")
+    if (!forwarderAddress) throw new Error("Forwarder chain not supported")
 
     const message =
       type === "forwardRefundToL2"
@@ -512,7 +512,7 @@ export class Bridge {
     const { gatewayIn } = this.#getGatewaysByChains(chainIn, chainOut)
     const rollupAddress = aztecRollupContractL1Addresses[chainForwarder.id]
     const forwarderAddress = forwarderAddresses[chainForwarder.id]
-    if (!rollupAddress || forwarderAddress) throw new Error("Forwarder chain not supported")
+    if (!rollupAddress || !forwarderAddress) throw new Error("Forwarder chain not supported")
 
     const message =
       type === "forwardRefundToL2"
