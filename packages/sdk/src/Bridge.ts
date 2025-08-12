@@ -859,8 +859,7 @@ export class Bridge {
         ...baseOrderData,
         sender: isPrivate ? PRIVATE_SENDER : getAztecAddressFromAzguardAccount(selectedAccount),
       })
-
-      const [, response] = await this.azguardClient!.execute([
+      const response = await this.azguardClient!.execute([
         {
           kind: "register_contract",
           chain: `aztec:11155111`,
@@ -896,8 +895,8 @@ export class Bridge {
           ],
         },
       ])
-      if (response.status === "failed") throw new Error(response.error)
-      const orderOpenedTxHash = (response as OkResult<SendTransactionResult>).result as Hex
+      for (const res of response) if (res.status === "failed") throw new Error(res.error)
+      const orderOpenedTxHash = (response[1] as OkResult<SendTransactionResult>).result as Hex
 
       const waitForReceipt = async (txHash: string): Promise<TxReceipt> => {
         while (true) {
