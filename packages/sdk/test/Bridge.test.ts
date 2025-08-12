@@ -50,7 +50,8 @@ const setup = async () => {
 
 /**
  * ⚠️ IMPORTANT:
- * Be sure to use accounts that own WETH on both Base Sepolia and Aztec Sepolia.
+ * Be sure to use accounts that own WETH on both Base Sepolia and Aztec Sepolia
+ * and that a filler is up and running.
  *
  * If your account doesn't have WETH on Aztec Sepolia, you can:
  * - Use our bridge: https://aztec-evm-bridge.substancelabs.xyz/

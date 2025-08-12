@@ -326,7 +326,13 @@ export class Bridge {
     if (this.azguardClient) {
       const selectedAccount = this.azguardClient.accounts[0]
       const fillerData = getAztecAddressFromAzguardAccount(selectedAccount)
-      const [response] = await this.azguardClient.execute([
+      const response = await this.azguardClient.execute([
+        {
+          kind: "register_contract",
+          chain: `aztec:11155111`,
+          address: orderData.outputToken,
+          artifact: TokenContractArtifact,
+        },
         {
           kind: "send_transaction",
           account: selectedAccount,
@@ -362,12 +368,19 @@ export class Bridge {
           ],
         },
       ])
-      if (response.status === "failed") throw new Error(response.error)
-      return (response as OkResult<SendTransactionResult>).result as Hex
+      for (const res of response) if (res.status === "failed") throw new Error(res.error)
+      return (response[1] as OkResult<SendTransactionResult>).result as Hex
     }
 
     const wallet = await this.#getAztecWallet()
     const fillerData = wallet.getAddress().toString()
+
+    await this.aztecPxe?.registerContract({
+      instance: (await createAztecNodeClient(aztecSepolia.rpcUrls.default.http[0]).getContract(
+        AztecAddress.fromString(orderData.outputToken),
+      ))!,
+      artifact: TokenContractArtifact,
+    })
     const [token, aztecGateway] = await Promise.all([
       TokenContract.at(AztecAddress.fromString(orderData.outputToken), wallet),
       AztecGateway7683Contract.at(AztecAddress.fromString(gatewayOut), wallet),
