@@ -13,12 +13,12 @@ const [
   recipientAddress,
   amountPrivate = "1000000000000000000",
   amountPublic = "1000000000000000000",
-  pxeUrl = "https://aztec-alpha-testnet-fullnode.zkv.xyz",
+  rpcUrl = "https://aztec-alpha-testnet-fullnode.zkv.xyz",
 ] = process.argv
 
 const main = async () => {
   const logger = createLogger("deploy-token")
-  const pxe = await getPxe(pxeUrl)
+  const pxe = await getPxe(rpcUrl)
 
   const paymentMethod = new SponsoredFeePaymentMethod(await getSponsoredFPCAddress())
   const wallet = await getWalletFromSecretKey({
@@ -28,7 +28,7 @@ const main = async () => {
     deploy: false,
   })
 
-  const contractInstance = await getNode(pxeUrl).getContract(AztecAddress.fromString(tokenAddress))
+  const contractInstance = await getNode(rpcUrl).getContract(AztecAddress.fromString(tokenAddress))
   await pxe.registerContract({
     instance: contractInstance!,
     artifact: TokenContractArtifact,
