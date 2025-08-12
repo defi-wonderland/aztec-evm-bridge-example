@@ -32,14 +32,14 @@ export const aztecSepolia: InternalChain = {
 }
 
 export const gatewayAddresses: Record<number, Hex> = {
-  [aztecSepolia.id]: "0x1bffdfe300ac79d18c3c86718ebf770b2142d5fba9a906e3a4cd0e9774623f3a",
-  [baseSepolia.id]: "0xe91C15EF8cE69e7bd90a68E4aC576A242C84eAdF",
+  [aztecSepolia.id]: "0x1b4f272b622a493184f6fbb83fc7631f1ce9bad68d4d4c150dc55eed5f100d73",
+  [baseSepolia.id]: "0x0Bf4eD5a115e6Ad789A88c21e9B75821Cc7B2e6f",
 }
 
 export const aztecRollupContractL1Addresses: Record<number, Hex> = {
-  [sepolia.id]: "0xee6d4e937f0493fb461f28a75cf591f1dba8704e",
+  [sepolia.id]: "0x216f071653a82ced3ef9d29f3f0c0ed7829c8f81",
 }
 
 export const forwarderAddresses: Record<number, Hex> = {
-  [sepolia.id]: "0x7664bCEF1A1D690AeC75E1f41c8890C94284D40a",
+  [sepolia.id]: "0xfbbb6dDb3534A2A8eb7c0eC1ad3abBbc9f694ECd",
 }

@@ -15,6 +15,7 @@ import {
   padHex,
 } from "viem"
 import * as evmChains from "viem/chains"
+import { computeL2ToL1MessageHash } from "@aztec/stdlib/hash"
 import { AztecAddress, Fr, PXE, TxHash, sleep, TxReceipt, EthAddress, createAztecNodeClient } from "@aztec/aztec.js"
 import { AzguardClient } from "@azguardwallet/client"
 import { OkResult, SendTransactionResult, SimulateViewsResult } from "@azguardwallet/types"
@@ -81,6 +82,7 @@ import type {
   ResolvedOrder,
   SettleOrderDetails,
 } from "./types"
+import { version } from "os"
 
 const AZTEC_WAIT_TIMEOUT = 120000
 
@@ -515,15 +517,15 @@ export class Bridge {
       type === "forwardRefundToL2"
         ? [hexToBuffer(REFUND_ORDER_TYPE), hexToBuffer(orderId)]
         : [hexToBuffer(SETTLE_ORDER_TYPE), hexToBuffer(orderId), hexToBuffer(padHex(fillerAddress!))]
-
     const messageHash = sha256ToField(message)
-    const l2ToL1MessageHash = sha256ToField([
-      hexToBuffer(gatewayOut),
-      new Fr(AZTEC_VERSION).toBuffer(),
-      EthAddress.fromString(forwarderAddress).toBuffer32(),
-      new Fr(chainForwarder.id).toBuffer(),
-      messageHash.toBuffer(),
-    ])
+
+    const l2ToL1MessageHash = computeL2ToL1MessageHash({
+      l2Sender: AztecAddress.fromString(gatewayOut),
+      l1Recipient: EthAddress.fromString(forwarderAddress),
+      content: messageHash,
+      rollupVersion: Fr.fromString(AZTEC_VERSION.toString()),
+      chainId: Fr.fromString(chainForwarder.id.toString()),
+    })
 
     await this.#maybeRegisterAztecGateway()
     const getRefundOrSettlementBlockNumber = async (): Promise<bigint> => {
@@ -534,37 +536,51 @@ export class Bridge {
       ](Fr.fromBufferReduce(hexToBuffer(orderId))).simulate()) as bigint
     }
 
-    const aztecBlockNumber = await getRefundOrSettlementBlockNumber()
-    if (aztecBlockNumber === 0n)
+    const aztecMessageBlockNumber = await getRefundOrSettlementBlockNumber()
+    if (aztecMessageBlockNumber === 0n)
       throw new Error(`Order ${type === "forwardRefundToL2" ? "refund" : "settlement"} block number not found`)
-    const provenBlockNumber = (await createPublicClient({
+    const aztecProvenBlockNumber = (await createPublicClient({
       chain: chainForwarder,
       transport: http(),
     }).readContract({
-      address: aztecRollupContractL1Addresses[chainForwarder.id],
+      address: rollupAddress,
       args: [],
       abi: rollupAbi,
       functionName: "getProvenBlockNumber",
     })) as bigint
-    if (aztecBlockNumber > provenBlockNumber) {
+    if (aztecMessageBlockNumber > aztecProvenBlockNumber) {
       throw new Error(
-        `cannot forward to L2 for order ${orderId} because the corresponding block number ${aztecBlockNumber} is > than the last proven ${provenBlockNumber}!`,
+        `cannot forward to L2 for order ${orderId} because the corresponding block number ${aztecMessageBlockNumber} is > than the last proven ${aztecProvenBlockNumber}!`,
       )
     }
 
     const [l2ToL1MessageIndex, siblingPath] = await this.aztecPxe!.getL2ToL1MembershipWitness(
-      parseInt(aztecBlockNumber.toString()),
+      parseInt(aztecMessageBlockNumber.toString()),
       l2ToL1MessageHash,
     )
 
-    const l2ToL1Message = [[gatewayOut, AZTEC_VERSION], [forwarderAddress, chainForwarder.id], messageHash.toString()]
-    const path = siblingPath.toBufferArray().map((buff) => "0x" + buff.toString("hex"))
     const { walletClient, address } = await this.#getEvmWalletClientAndAddress(chainForwarder)
     return await walletClient.writeContract({
       abi: forwarderAbi,
       account: this.evmPrivateKey ? walletClient.account! : address,
       address: forwarderAddress,
-      args: [l2ToL1Message, bytesToHex(Buffer.concat([...message])), aztecBlockNumber, l2ToL1MessageIndex, path],
+      args: [
+        {
+          sender: {
+            actor: gatewayOut,
+            version: AZTEC_VERSION,
+          },
+          recipient: {
+            actor: forwarderAddress,
+            chainId: chainForwarder.id,
+          },
+          content: messageHash.toString(),
+        },
+        bytesToHex(Buffer.concat([...message])),
+        BigInt(aztecMessageBlockNumber),
+        BigInt(l2ToL1MessageIndex),
+        siblingPath.toBufferArray().map((buf) => padHex(bytesToHex(buf))),
+      ],
       chain: chainForwarder,
       functionName: type === "forwardRefundToL2" ? "forwardRefundToL2" : "forwardSettleToL2",
     })
