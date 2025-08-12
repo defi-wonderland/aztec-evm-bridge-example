@@ -25,6 +25,7 @@ import { poseidon2Hash, sha256ToField } from "@aztec/foundation/crypto"
 import { waitForTransactionReceipt } from "viem/actions"
 import { privateKeyToAccount } from "viem/accounts"
 import { SponsoredFPCContractArtifact } from "@aztec/noir-contracts.js/SponsoredFPC"
+import { hexToBuffer } from "@aztec/foundation/string"
 import { ssz } from "@lodestar/types"
 const { SignedBeaconBlock } = ssz.electra
 
@@ -534,32 +535,11 @@ export class Bridge {
 
     await this.#maybeRegisterAztecGateway()
     const getRefundBlockNumber = async (): Promise<bigint> => {
-      if (this.azguardClient) {
-        const selectedAccount = this.azguardClient.accounts[0]
-        const [response] = await this.azguardClient!.execute([
-          {
-            kind: "simulate_views",
-            account: selectedAccount,
-            calls: [
-              {
-                kind: "call",
-                contract: gatewayIn,
-                method:
-                  type === "forwardRefundToL2" ? "get_order_refund_block_number" : "get_order_settlement_block_number",
-                args: [orderId],
-              },
-            ],
-          },
-        ])
-        if (response.status === "failed") throw new Error(response.error)
-        return BigInt((response as OkResult<SimulateViewsResult>).result.encoded[0][0])
-      }
-
       const wallet = await this.#getAztecWallet()
       const gateway = await AztecGateway7683Contract.at(AztecAddress.fromString(gatewayIn), wallet)
       return (await gateway.methods[
         type === "forwardRefundToL2" ? "get_order_refund_block_number" : "get_order_settlement_block_number"
-      ](Fr.fromBufferReduce(Buffer.from(orderId.slice(2), "hex"))).simulate()) as bigint
+      ](Fr.fromBufferReduce(hexToBuffer(orderId))).simulate()) as bigint
     }
 
     const aztecBlockNumber = await getRefundBlockNumber()
