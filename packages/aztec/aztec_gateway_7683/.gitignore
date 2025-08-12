@@ -1,7 +1,4 @@
 target/
-node_modules/
 codegenCache.json
 artifacts/
 store/
-.env
-.yarn/

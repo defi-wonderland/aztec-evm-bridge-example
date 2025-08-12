@@ -1,0 +1,18 @@
+{
+  "name": "aztec-evm-bridge",
+  "packageManager": "yarn@4.9.2",
+  "workspaces": [
+    "packages/aztec/*",
+    "packages/filler",
+    "packages/sdk"
+  ],
+  "scripts": {
+    "lint": "yarn workspaces foreach --since run lint",
+    "lint:fix": "yarn workspaces foreach --since run lint:fix",
+    "format": "yarn workspaces foreach --since run format"
+  },
+  "devDependencies": {
+    "eslint": "^9.22.0",
+    "prettier": "^3.6.2"
+  }
+}

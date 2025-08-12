@@ -167,7 +167,7 @@ describe("AztecGateway7683", () => {
     )
       .send({ fee: { paymentMethod } })
       .wait({
-        timeout: 120000
+        timeout: 120000,
       })
 
     const orderData = new OrderData({
