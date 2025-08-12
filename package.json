@@ -1,6 +1,7 @@
 {
   "name": "aztec-evm-bridge",
   "packageManager": "yarn@4.9.2",
+  "type": "module",
   "workspaces": [
     "packages/aztec/*",
     "packages/filler",
@@ -10,7 +11,10 @@
     "lint": "yarn workspaces foreach --since run lint",
     "lint:fix": "yarn workspaces foreach --since run lint:fix",
     "format": "yarn workspaces foreach --since run format",
-    "prepare": "husky"
+    "prepare": "husky",
+    "postinstall": "husky install",
+    "prepublishOnly": "pinst --disable",
+    "postpublish": "pinst --enable"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.8.1",
@@ -18,7 +22,13 @@
     "@eslint/js": "^9.33.0",
     "eslint": "^9.22.0",
     "husky": "^9.1.7",
+    "lint-staged": ">=10",
+    "pinst": ">=2",
     "prettier": "^3.6.2",
     "typescript-eslint": "^8.39.0"
+  },
+  "lint-staged": {
+    "*.js": "eslint --cache --fix",
+    "*.format": "prettier --write"
   }
 }
