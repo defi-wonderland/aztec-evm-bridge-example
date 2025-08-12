@@ -205,12 +205,12 @@ export class Bridge {
 
   async finalizeForwardSettleOrder(details: SettleOrderDetails): Promise<Hex> {
     const { chainIn, chainOut } = details
-    if (chainIn.id === aztecSepolia.id) {
+    if (chainOut.id === aztecSepolia.id) {
       return this.#finalizeForwardToL2({
         ...details,
         type: "forwardSettleToL2",
       })
-    } else if (chainOut.id === aztecSepolia.id) {
+    } else if (chainIn.id === aztecSepolia.id) {
       return this.#finalizeForwardSettleOrderToAztec(details)
     }
     throw new Error("Neither chain is Aztec")
@@ -218,9 +218,9 @@ export class Bridge {
 
   async forwardRefundOrder(details: RefundOrderDetails): Promise<Hex> {
     const { chainIn, chainOut } = details
-    if (chainIn.id === aztecSepolia.id) {
+    if (chainOut.id === aztecSepolia.id) {
       return this.#forwardToL2({ ...details, type: "forwardRefundToL2" })
-    } else if (chainOut.id === aztecSepolia.id) {
+    } else if (chainIn.id === aztecSepolia.id) {
       return this.#forwardRefundOrderToAztec(details)
     }
     throw new Error("Neither chain is Aztec")
@@ -228,10 +228,9 @@ export class Bridge {
 
   async forwardSettleOrder(details: SettleOrderDetails): Promise<Hex> {
     const { chainIn, chainOut } = details
-    if (chainIn.id === aztecSepolia.id) {
-      // TODO: add filler data
+    if (chainOut.id === aztecSepolia.id) {
       return this.#forwardToL2({ ...details, type: "forwardSettleToL2" })
-    } else if (chainOut.id === aztecSepolia.id) {
+    } else if (chainIn.id === aztecSepolia.id) {
       return this.#forwardSettleOrderToAztec(details)
     }
     throw new Error("Neither chain is Aztec")
@@ -439,12 +438,8 @@ export class Bridge {
 
     const message =
       type === "forwardRefundToL2"
-        ? [Buffer.from(REFUND_ORDER_TYPE.slice(2), "hex"), Buffer.from(orderId.slice(2), "hex")]
-        : [
-            Buffer.from(SETTLE_ORDER_TYPE.slice(2), "hex"),
-            Buffer.from(orderId.slice(2), "hex"),
-            Buffer.from(padHex(fillerAddress!)!.slice(2), "hex"),
-          ]
+        ? [hexToBuffer(REFUND_ORDER_TYPE), hexToBuffer(orderId)]
+        : [hexToBuffer(SETTLE_ORDER_TYPE), hexToBuffer(orderId), hexToBuffer(padHex(fillerAddress!))]
     const messageHash = sha256ToField(message)
 
     const { parentBeaconBlockRoot: beaconRoot, timestamp: beaconOracleTimestamp } = await createPublicClient({
@@ -510,23 +505,20 @@ export class Bridge {
   async #forwardToL2(details: ForwardDetails): Promise<Hex> {
     const { chainForwarder, chainIn, chainOut, fillerAddress, orderId, type } = details
     if (!chainForwarder) throw new Error("You must specify a forwarder chain")
-    const { gatewayIn } = this.#getGatewaysByChains(chainIn, chainOut)
+    const { gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
+
     const rollupAddress = aztecRollupContractL1Addresses[chainForwarder.id]
     const forwarderAddress = forwarderAddresses[chainForwarder.id]
     if (!rollupAddress || !forwarderAddress) throw new Error("Forwarder chain not supported")
 
     const message =
       type === "forwardRefundToL2"
-        ? [Buffer.from(REFUND_ORDER_TYPE.slice(2), "hex"), Buffer.from(orderId.slice(2), "hex")]
-        : [
-            Buffer.from(SETTLE_ORDER_TYPE.slice(2), "hex"),
-            Buffer.from(orderId.slice(2), "hex"),
-            Buffer.from(padHex(fillerAddress!).slice(2), "hex"),
-          ]
+        ? [hexToBuffer(REFUND_ORDER_TYPE), hexToBuffer(orderId)]
+        : [hexToBuffer(SETTLE_ORDER_TYPE), hexToBuffer(orderId), hexToBuffer(padHex(fillerAddress!))]
 
     const messageHash = sha256ToField(message)
     const l2ToL1MessageHash = sha256ToField([
-      Buffer.from(gatewayIn, "hex"),
+      hexToBuffer(gatewayOut),
       new Fr(AZTEC_VERSION).toBuffer(),
       EthAddress.fromString(forwarderAddress).toBuffer32(),
       new Fr(chainForwarder.id).toBuffer(),
@@ -534,15 +526,17 @@ export class Bridge {
     ])
 
     await this.#maybeRegisterAztecGateway()
-    const getRefundBlockNumber = async (): Promise<bigint> => {
+    const getRefundOrSettlementBlockNumber = async (): Promise<bigint> => {
       const wallet = await this.#getAztecWallet()
-      const gateway = await AztecGateway7683Contract.at(AztecAddress.fromString(gatewayIn), wallet)
+      const gateway = await AztecGateway7683Contract.at(AztecAddress.fromString(gatewayOut), wallet)
       return (await gateway.methods[
         type === "forwardRefundToL2" ? "get_order_refund_block_number" : "get_order_settlement_block_number"
       ](Fr.fromBufferReduce(hexToBuffer(orderId))).simulate()) as bigint
     }
 
-    const aztecBlockNumber = await getRefundBlockNumber()
+    const aztecBlockNumber = await getRefundOrSettlementBlockNumber()
+    if (aztecBlockNumber === 0n)
+      throw new Error(`Order ${type === "forwardRefundToL2" ? "refund" : "settlement"} block number not found`)
     const provenBlockNumber = (await createPublicClient({
       chain: chainForwarder,
       transport: http(),
@@ -563,7 +557,7 @@ export class Bridge {
       l2ToL1MessageHash,
     )
 
-    const l2ToL1Message = [[gatewayIn, AZTEC_VERSION], [forwarderAddress, chainForwarder.id], messageHash.toString()]
+    const l2ToL1Message = [[gatewayOut, AZTEC_VERSION], [forwarderAddress, chainForwarder.id], messageHash.toString()]
     const path = siblingPath.toBufferArray().map((buff) => "0x" + buff.toString("hex"))
     const { walletClient, address } = await this.#getEvmWalletClientAndAddress(chainForwarder)
     return await walletClient.writeContract({
@@ -1063,7 +1057,6 @@ export class Bridge {
 
   async #refundAztecToEvmOrder(details: RefundOrderDetails): Promise<Hex> {
     const { orderId, chainIn, chainOut } = details
-
     const { gatewayIn, gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
 
     let status = 0
