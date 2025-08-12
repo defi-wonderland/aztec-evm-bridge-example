@@ -1,24 +1,18 @@
-[submodule "evm/lib/openzeppelin-contracts"]
-	path = evm/lib/openzeppelin-contracts
+[submodule "packages/evm/lib/openzeppelin-contracts"]
+	path = packages/evm/lib/openzeppelin-contracts
 	url = https://github.com/OpenZeppelin/openzeppelin-contracts
-[submodule "evm/lib/hyperlane-monorepo"]
-	path = evm/lib/hyperlane-monorepo
+[submodule "packages/evm/lib/hyperlane-monorepo"]
+	path = packages/evm/lib/hyperlane-monorepo
 	url = https://github.com/hyperlane-xyz/hyperlane-monorepo
-[submodule "evm/lib/permit2"]
-	path = evm/lib/permit2
+[submodule "packages/evm/lib/permit2"]
+	path = packages/evm/lib/permit2
 	url = https://github.com/Uniswap/permit2
-[submodule "evm/lib/optimism"]
-	path = evm/lib/optimism
+[submodule "packages/evm/lib/optimism"]
+	path = packages/evm/lib/optimism
 	url = https://github.com/ethereum-optimism/optimism
-[submodule "evm/lib/aztec-packages"]
-	path = evm/lib/aztec-packages
+[submodule "packages/evm/lib/aztec-packages"]
+	path = packages/evm/lib/aztec-packages
 	url = https://github.com/AztecProtocol/aztec-packages
-[submodule "evm/lib/lib-keccak"]
-	path = evm/lib/lib-keccak
+[submodule "packages/evm/lib/lib-keccak"]
+	path = packages/evm/lib/lib-keccak
 	url = https://github.com/ethereum-optimism/lib-keccak
-[submodule "example/vault/lib/forge-std"]
-	path = example/vault/lib/forge-std
-	url = https://github.com/foundry-rs/forge-std
-[submodule "example/vault/lib/openzeppelin-contracts"]
-	path = example/vault/lib/openzeppelin-contracts
-	url = https://github.com/OpenZeppelin/openzeppelin-contracts
