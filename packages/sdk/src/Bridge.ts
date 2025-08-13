@@ -74,6 +74,7 @@ import type {
   FilledLog,
   FillOrderDetails,
   ForwardDetails,
+  InternalChain,
   Order,
   OrderCallbacks,
   OrderData,
@@ -82,7 +83,6 @@ import type {
   ResolvedOrder,
   SettleOrderDetails,
 } from "./types"
-import { version } from "os"
 
 const AZTEC_WAIT_TIMEOUT = 120000
 
@@ -193,63 +193,62 @@ export class Bridge {
   }
 
   async finalizeForwardRefundOrder(details: RefundOrderDetails): Promise<Hex> {
-    const { chainIn, chainOut } = details
-    if (chainIn.id === aztecSepolia.id) {
+    const { chainIdIn, chainIdOut } = details
+    if (chainIdOut === aztecSepolia.id) {
       return this.#finalizeForwardToL2({
         ...details,
         type: "forwardRefundToL2",
       })
-    } else if (chainOut.id === aztecSepolia.id) {
+    } else if (chainIdIn === aztecSepolia.id) {
       return this.#finalizeForwardRefundOrderToAztec(details)
     }
     throw new Error("Neither chain is Aztec")
   }
 
   async finalizeForwardSettleOrder(details: SettleOrderDetails): Promise<Hex> {
-    const { chainIn, chainOut } = details
-    if (chainOut.id === aztecSepolia.id) {
+    const { chainIdIn, chainIdOut } = details
+    if (chainIdOut === aztecSepolia.id) {
       return this.#finalizeForwardToL2({
         ...details,
         type: "forwardSettleToL2",
       })
-    } else if (chainIn.id === aztecSepolia.id) {
+    } else if (chainIdIn === aztecSepolia.id) {
       return this.#finalizeForwardSettleOrderToAztec(details)
     }
     throw new Error("Neither chain is Aztec")
   }
 
   async forwardRefundOrder(details: RefundOrderDetails): Promise<Hex> {
-    const { chainIn, chainOut } = details
-    if (chainOut.id === aztecSepolia.id) {
+    const { chainIdIn, chainIdOut } = details
+    if (chainIdOut === aztecSepolia.id) {
       return this.#forwardToL2({ ...details, type: "forwardRefundToL2" })
-    } else if (chainIn.id === aztecSepolia.id) {
+    } else if (chainIdIn === aztecSepolia.id) {
       return this.#forwardRefundOrderToAztec(details)
     }
     throw new Error("Neither chain is Aztec")
   }
 
   async forwardSettleOrder(details: SettleOrderDetails): Promise<Hex> {
-    const { chainIn, chainOut } = details
-    if (chainOut.id === aztecSepolia.id) {
+    const { chainIdIn, chainIdOut } = details
+    if (chainIdOut === aztecSepolia.id) {
       return this.#forwardToL2({ ...details, type: "forwardSettleToL2" })
-    } else if (chainIn.id === aztecSepolia.id) {
+    } else if (chainIdIn === aztecSepolia.id) {
       return this.#forwardSettleOrderToAztec(details)
     }
     throw new Error("Neither chain is Aztec")
   }
 
   async openOrder(order: Order, callbacks?: OrderCallbacks): Promise<OrderResult> {
-    const { chainIn, chainOut, mode, data } = order
-    if (chainIn.id === chainOut.id) throw new Error("Invalid chains: source and destination must differ")
-
+    const { chainIdIn, chainIdOut, mode, data } = order
+    if (chainIdIn === chainIdOut) throw new Error("Invalid chains: source and destination must differ")
     const validModes = ["private", "public", "privateWithHook", "publicWithHook"]
     if (!validModes.includes(mode)) throw new Error(`Invalid mode: ${mode}`)
 
     if (data.length !== 66) throw new Error("Invalid data: must be 32 bytes")
 
-    if (chainIn.id === aztecSepolia.id) {
+    if (chainIdIn === aztecSepolia.id) {
       return this.#openAztecToEvmOrder(order, callbacks)
-    } else if (chainOut.id === aztecSepolia.id) {
+    } else if (chainIdOut === aztecSepolia.id) {
       return this.#openEvmToAztecOrder(order, callbacks)
     } else {
       throw new Error("Neither chain is Aztec")
@@ -257,10 +256,10 @@ export class Bridge {
   }
 
   async refundOrder(details: RefundOrderDetails): Promise<Hex> {
-    const { chainIn, chainOut } = details
-    if (chainIn.id === aztecSepolia.id) {
+    const { chainIdIn, chainIdOut } = details
+    if (chainIdIn === aztecSepolia.id) {
       return this.#refundAztecToEvmOrder(details)
-    } else if (chainOut.id === aztecSepolia.id) {
+    } else if (chainIdOut === aztecSepolia.id) {
       return this.#refundEvmToAztecOrder(details)
     }
     throw new Error("Neither chain is Aztec")
@@ -445,9 +444,11 @@ export class Bridge {
   }
 
   async #finalizeForwardToL2(details: ForwardDetails): Promise<Hex> {
-    const { chainForwarder, chainIn, chainOut, fillerAddress, orderId, type } = details
-    if (!chainForwarder) throw new Error("You must specify a forwarder chain")
-    const { gatewayIn } = this.#getGatewaysByChains(chainIn, chainOut)
+    const { chainIdForwarder, chainIdIn, chainIdOut, fillerAddress, orderId, type } = details
+    if (!chainIdForwarder) throw new Error("You must specify a forwarder chain")
+    const chainForwarder = this.#getChainByChainId(chainIdForwarder)
+    const { chainIn, chainOut } = this.#getChainInAndOutByChainIds(chainIdIn, chainIdOut)
+    const { gatewayIn } = this.#getGatewaysByChainIds(chainIdIn, chainIdOut)
     const forwarderAddress = forwarderAddresses[chainForwarder.id]
     if (!forwarderAddress) throw new Error("Forwarder chain not supported")
 
@@ -481,7 +482,7 @@ export class Bridge {
       ),
     )
     const proof = await createPublicClient({
-      chain: chainForwarder,
+      chain: chainForwarder as Chain,
       transport: http(),
     }).getProof({
       address: forwarderAddress,
@@ -518,9 +519,10 @@ export class Bridge {
   }
 
   async #forwardToL2(details: ForwardDetails): Promise<Hex> {
-    const { chainForwarder, chainIn, chainOut, fillerAddress, orderId, type } = details
-    if (!chainForwarder) throw new Error("You must specify a forwarder chain")
-    const { gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
+    const { chainIdForwarder, chainIdIn, chainIdOut, fillerAddress, orderId, type } = details
+    if (!chainIdForwarder) throw new Error("You must specify a forwarder chain")
+    const chainForwarder = this.#getChainByChainId(chainIdForwarder) as Chain
+    const { gatewayOut } = this.#getGatewaysByChainIds(chainIdIn, chainIdOut)
 
     const rollupAddress = aztecRollupContractL1Addresses[chainForwarder.id]
     const forwarderAddress = forwarderAddresses[chainForwarder.id]
@@ -627,6 +629,26 @@ export class Bridge {
     return await account.getWallet()
   }
 
+  #getChainInAndOutByChainIds(
+    chainIdIn: Order["chainIdIn"],
+    chainIdOut: Order["chainIdOut"],
+  ): {
+    chainIn: InternalChain
+    chainOut: InternalChain
+  } {
+    return {
+      chainIn: this.#getChainByChainId(chainIdIn),
+      chainOut: this.#getChainByChainId(chainIdOut),
+    }
+  }
+
+  #getChainByChainId(chainId: number): InternalChain {
+    const chains = [...Object.values(evmChains), aztecSepolia] as InternalChain[]
+    const chain = chains.find((c) => c.id === chainId)
+    if (!chain) throw new Error("Chain not found")
+    return chain
+  }
+
   async #getEvmWalletClientAndAddress(chain: Chain) {
     const walletClient = this.evmProvider
       ? createWalletClient({
@@ -668,16 +690,16 @@ export class Bridge {
     }
   }
 
-  #getGatewaysByChains(
-    chainIn: Order["chainIn"],
-    chainOut: Order["chainOut"],
+  #getGatewaysByChainIds(
+    chainIdIn: Order["chainIdIn"],
+    chainIdOut: Order["chainIdOut"],
   ): {
     gatewayIn: Hex
     gatewayOut: Hex
   } {
-    const gatewayIn = gatewayAddresses[chainIn.id]
+    const gatewayIn = gatewayAddresses[chainIdIn]
     if (!gatewayIn) throw new Error("Unsupported source chain")
-    const gatewayOut = gatewayAddresses[chainOut.id]
+    const gatewayOut = gatewayAddresses[chainIdOut]
     if (!gatewayOut) throw new Error("Unsupported destination chain")
     return {
       gatewayIn,
@@ -712,11 +734,12 @@ export class Bridge {
     receipt: TxReceipt,
     callbacks?: OrderCallbacks,
   ): Promise<{ transactionHash: Hex; resolvedOrder: ResolvedOrder }> {
-    const { chainIn, chainOut } = order
+    const { chainIdIn, chainIdOut } = order
     const { onOrderOpened, onOrderFilled } = callbacks || {}
-    const { gatewayIn, gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
+    const { chainIn, chainOut } = this.#getChainInAndOutByChainIds(chainIdIn, chainIdOut)
+    const { gatewayIn, gatewayOut } = this.#getGatewaysByChainIds(chainIdIn, chainIdOut)
 
-    if (chainIn.id !== aztecSepolia.id) throw new Error("Chain in is not Aztec")
+    if (chainIdIn !== aztecSepolia.id) throw new Error("Chain in is not Aztec")
     const { logs } = await createAztecNodeClient(aztecSepolia.rpcUrls.default.http[0]).getPublicLogs({
       fromBlock: receipt.blockNumber! - 1,
       toBlock: receipt.blockNumber! + 1,
@@ -760,9 +783,10 @@ export class Bridge {
   }
 
   async #monitorEvmToAztecOrder(order: Order, orderId: Hex, callbacks?: OrderCallbacks) {
-    const { chainIn, chainOut } = order
+    const { chainIdIn, chainIdOut } = order
     const { onOrderFilled } = callbacks || {}
-    const { gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
+    const { chainIn, chainOut } = this.#getChainInAndOutByChainIds(chainIdIn, chainIdOut)
+    const { gatewayOut } = this.#getGatewaysByChainIds(chainIdIn, chainIdOut)
     await this.#maybeRegisterAztecGateway()
 
     if (this.azguardClient) {
@@ -831,8 +855,8 @@ export class Bridge {
   }
 
   async #openAztecToEvmOrder(order: Order, callbacks?: OrderCallbacks): Promise<OrderResult> {
-    const { chainOut, mode, data, amountIn, amountOut, tokenIn, tokenOut, chainIn, recipient } = order
-    const { gatewayIn, gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
+    const { amountIn, amountOut, chainIdIn, chainIdOut, data, mode, recipient, tokenIn, tokenOut } = order
+    const { gatewayIn, gatewayOut } = this.#getGatewaysByChainIds(chainIdIn, chainIdOut)
     const fillDeadline = order.fillDeadline ?? 2 ** 32 - 1
     const nonce = Fr.random()
     const isPrivate = mode.includes("private")
@@ -843,8 +867,8 @@ export class Bridge {
       amountIn,
       amountOut,
       senderNonce: nonce.toBigInt(),
-      originDomain: chainIn.id,
-      destinationDomain: chainOut.id,
+      originDomain: chainIdIn,
+      destinationDomain: chainIdOut,
       destinationSettler: padHex(gatewayOut),
       fillDeadline,
       orderType: this.#getOrderType(mode),
@@ -989,15 +1013,16 @@ export class Bridge {
   }
 
   async #openEvmToAztecOrder(order: Order, callbacks?: OrderCallbacks): Promise<OrderResult> {
-    const { amountIn, amountOut, chainIn, chainOut, data, mode, recipient, tokenIn, tokenOut } = order
+    const { amountIn, amountOut, chainIdIn, chainIdOut, data, mode, recipient, tokenIn, tokenOut } = order
     const { onSecret, onOrderOpened, onOrderClaimed } = callbacks || {}
-    const { gatewayIn, gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
+    const { gatewayIn, gatewayOut } = this.#getGatewaysByChainIds(chainIdIn, chainIdOut)
+    const chainIn = this.#getChainByChainId(chainIdIn)
+    const { walletClient, address: sender } = await this.#getEvmWalletClientAndAddress(chainIn as Chain)
 
     const fillDeadline = order.fillDeadline ?? 2 ** 32 - 1
     const nonce = Fr.random()
     const isPrivate = mode.includes("private")
     const secret = isPrivate ? Fr.random() : null
-    const { walletClient, address: sender } = await this.#getEvmWalletClientAndAddress(chainIn as Chain)
 
     const orderData: OrderData = {
       sender: padHex(sender),
@@ -1007,8 +1032,8 @@ export class Bridge {
       amountIn,
       amountOut,
       senderNonce: nonce.toBigInt(),
-      originDomain: chainIn.id,
-      destinationDomain: chainOut.id,
+      originDomain: chainIdIn,
+      destinationDomain: chainIdOut,
       destinationSettler: padHex(gatewayOut),
       fillDeadline,
       orderType: isPrivate ? PRIVATE_ORDER : PUBLIC_ORDER,
@@ -1085,8 +1110,9 @@ export class Bridge {
   }
 
   async #refundAztecToEvmOrder(details: RefundOrderDetails): Promise<Hex> {
-    const { orderId, chainIn, chainOut } = details
-    const { gatewayIn, gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
+    const { orderId, chainIdIn, chainIdOut } = details
+    const chainOut = this.#getChainByChainId(chainIdOut)
+    const { gatewayIn, gatewayOut } = this.#getGatewaysByChainIds(chainIdIn, chainIdOut)
 
     let status = 0
     if (this.azguardClient) {
@@ -1139,8 +1165,9 @@ export class Bridge {
   }
 
   async #refundEvmToAztecOrder(details: RefundOrderDetails): Promise<Hex> {
-    const { orderId, chainIn, chainOut } = details
-    const { gatewayIn, gatewayOut } = this.#getGatewaysByChains(chainIn, chainOut)
+    const { orderId, chainIdIn, chainIdOut } = details
+    const { gatewayIn, gatewayOut } = this.#getGatewaysByChainIds(chainIdIn, chainIdOut)
+    const chainIn = this.#getChainByChainId(chainIdIn)
 
     const order = (await createPublicClient({
       chain: chainIn as Chain,

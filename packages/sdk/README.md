@@ -52,8 +52,8 @@ const bridge = new Bridge({
 })
 bridge
   .openOrder({
-    chainIn: aztecSepolia as Chain,
-    chainOut: baseSepolia,
+    chainIdIn: aztecSepolia.id,
+    chainIdOut: baseSepolia.id,
     amountIn: 1n,
     amountOut: 1n, // amountOut must be less than amountIn. It should count the slippage
     tokenIn: "0x...",

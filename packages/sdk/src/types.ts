@@ -51,8 +51,8 @@ export type InternalChain =
     }
 
 export interface Order {
-  chainIn: InternalChain
-  chainOut: InternalChain
+  chainIdIn: number
+  chainIdOut: number
   amountIn: bigint
   amountOut: bigint
   tokenIn: Hex
@@ -86,9 +86,9 @@ export interface FillOrderDetails {
 
 export interface RefundOrderDetails {
   orderId: Hex
-  chainIn: InternalChain
-  chainOut: InternalChain
-  chainForwarder?: Chain
+  chainIdIn: number
+  chainIdOut: number
+  chainIdForwarder?: number
 }
 
 export type SettleOrderDetails = RefundOrderDetails & {

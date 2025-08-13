@@ -4,7 +4,7 @@ import { createStore } from "@aztec/kv-store/lmdb"
 import { getPXEServiceConfig } from "@aztec/pxe/config"
 import { createPXEService } from "@aztec/pxe/server"
 import { baseSepolia } from "viem/chains"
-import { Chain, Hex, isHex, padHex } from "viem"
+import { Hex, isHex, padHex } from "viem"
 import { AzguardClient } from "@azguardwallet/client"
 import { privateKeyToAddress } from "viem/accounts"
 import { deriveSigningKey } from "@aztec/stdlib/keys"
@@ -130,8 +130,8 @@ describe("Bridge", () => {
       let onOrderFilledCalled = false
       const result = await bridge.openOrder(
         {
-          chainIn: aztecSepolia as Chain,
-          chainOut: baseSepolia,
+          chainIdIn: aztecSepolia.id,
+          chainIdOut: baseSepolia.id,
           amountIn: 1n,
           amountOut: 1n,
           tokenIn: WETH_ON_AZTEC_SEPOLIA_ADDRESS,
@@ -165,8 +165,8 @@ describe("Bridge", () => {
       })
       const result = await bridge.openOrder(
         {
-          chainIn: aztecSepolia as Chain,
-          chainOut: baseSepolia,
+          chainIdIn: aztecSepolia.id,
+          chainIdOut: baseSepolia.id,
           amountIn: 1n,
           amountOut: 1n,
           tokenIn: WETH_ON_AZTEC_SEPOLIA_ADDRESS,
@@ -196,8 +196,8 @@ describe("Bridge", () => {
         new Promise((resolve) => {
           bridge.openOrder(
             {
-              chainIn: aztecSepolia as Chain,
-              chainOut: baseSepolia,
+              chainIdIn: aztecSepolia.id,
+              chainIdOut: baseSepolia.id,
               amountIn: 1n,
               amountOut: 1n,
               tokenIn: WETH_ON_AZTEC_SEPOLIA_ADDRESS,
@@ -215,8 +215,8 @@ describe("Bridge", () => {
       const orderId = await openOrder()
       const txHash = await bridge.refundOrder({
         orderId,
-        chainIn: aztecSepolia as Chain,
-        chainOut: baseSepolia,
+        chainIdIn: aztecSepolia.id,
+        chainIdOut: baseSepolia.id,
       })
       expect(isHex(txHash)).toBe(true)
     })
@@ -233,8 +233,8 @@ describe("Bridge", () => {
         new Promise((resolve) => {
           bridge.openOrder(
             {
-              chainIn: aztecSepolia as Chain,
-              chainOut: baseSepolia,
+              chainIdIn: aztecSepolia.id,
+              chainIdOut: baseSepolia.id,
               amountIn: 1n,
               amountOut: 1n,
               tokenIn: WETH_ON_AZTEC_SEPOLIA_ADDRESS,
@@ -278,8 +278,8 @@ describe("Bridge", () => {
       let onOrderClaimedCalled = false
       const result = await bridge.openOrder(
         {
-          chainIn: baseSepolia,
-          chainOut: aztecSepolia as Chain,
+          chainIdIn: baseSepolia.id,
+          chainIdOut: aztecSepolia.id,
           amountIn: 1n,
           amountOut: 1n,
           tokenIn: WETH_ON_BASE_SEPOLIA_ADDRESS,
@@ -324,8 +324,8 @@ describe("Bridge", () => {
       let onOrderFilledCalled = false
       const result = await bridge.openOrder(
         {
-          chainIn: baseSepolia,
-          chainOut: aztecSepolia as Chain,
+          chainIdIn: baseSepolia.id,
+          chainIdOut: aztecSepolia.id,
           amountIn: 1n,
           amountOut: 1n,
           tokenIn: WETH_ON_BASE_SEPOLIA_ADDRESS,
@@ -366,8 +366,8 @@ describe("Bridge", () => {
         new Promise((resolve) => {
           bridge.openOrder(
             {
-              chainIn: baseSepolia,
-              chainOut: aztecSepolia as Chain,
+              chainIdIn: baseSepolia.id,
+              chainIdOut: aztecSepolia.id,
               amountIn: 1n,
               amountOut: 1n,
               tokenIn: WETH_ON_BASE_SEPOLIA_ADDRESS,
@@ -385,8 +385,8 @@ describe("Bridge", () => {
       const orderId = await openOrder()
       const txHash = await bridge.refundOrder({
         orderId,
-        chainIn: baseSepolia,
-        chainOut: aztecSepolia as Chain,
+        chainIdIn: baseSepolia.id,
+        chainIdOut: aztecSepolia.id,
       })
       expect(isHex(txHash)).toBe(true)
     })
@@ -409,8 +409,8 @@ describe("Bridge", () => {
         new Promise((resolve) => {
           bridge.openOrder(
             {
-              chainIn: baseSepolia,
-              chainOut: aztecSepolia as Chain,
+              chainIdIn: baseSepolia.id,
+              chainIdOut: aztecSepolia.id,
               amountIn: 1n,
               amountOut: 1n,
               tokenIn: WETH_ON_BASE_SEPOLIA_ADDRESS,
@@ -450,8 +450,8 @@ describe("Bridge", () => {
         new Promise((resolve) => {
           bridge.openOrder(
             {
-              chainIn: baseSepolia,
-              chainOut: aztecSepolia as Chain,
+              chainIdIn: baseSepolia.id,
+              chainIdOut: aztecSepolia.id,
               amountIn: 1n,
               amountOut: 1n,
               tokenIn: WETH_ON_BASE_SEPOLIA_ADDRESS,
