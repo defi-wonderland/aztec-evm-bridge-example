@@ -146,9 +146,9 @@ class SettlementService extends BaseService {
       // NOTE: At the moment we support only Base Sepolia
 
       const l2EvmClient = this.evmMultiClient.getClientByChain(this.l2EvmChain)
-      const l1client = this.evmMultiClient.getClientByChain(this.l1Chain)
+      const l1Client = this.evmMultiClient.getClientByChain(this.l1Chain)
 
-      const [_, l2EvmAnchorRootblockNumber] = (await l1client.readContract({
+      const [_, l2EvmAnchorRootblockNumber] = (await l1Client.readContract({
         abi: anchorRegistryAbi,
         functionName: "getAnchorRoot",
         args: [],
@@ -180,9 +180,9 @@ class SettlementService extends BaseService {
       }
 
       // @ts-ignore
-      const forwardSettleTxHash = await l1client.writeContract({
+      const forwardSettleTxHash = await l1Client.writeContract({
         abi: forwarderAbi,
-        // account: l1client.account.address,
+        // account: l1Client.account.address,
         address: this.forwarderAddress,
         args: [
           order.orderId,
@@ -196,7 +196,7 @@ class SettlementService extends BaseService {
       this.logger.info(
         `waiting for forwardSettleToAztec transaction confirmation of ${forwardSettleTxHash} for order ${order.orderId} ...`,
       )
-      await waitForTransactionReceipt(l1client, { hash: forwardSettleTxHash })
+      await waitForTransactionReceipt(l1Client, { hash: forwardSettleTxHash })
 
       this.logger.info(
         `settlement succesfully forwarded to Aztec for order ${order.orderId}. tx hash: ${forwardSettleTxHash}`,
@@ -247,8 +247,8 @@ class SettlementService extends BaseService {
         .get_order_settlement_block_number(Fr.fromBufferReduce(Buffer.from(order.orderId.slice(2), "hex")))
         .simulate()) as bigint
 
-      const l1client = this.evmMultiClient.getClientByChain(this.l1Chain)
-      const provenBlockNumber = (await l1client.readContract({
+      const l1Client = this.evmMultiClient.getClientByChain(this.l1Chain)
+      const provenBlockNumber = (await l1Client.readContract({
         address: AZTEC_ROLLUP_CONTRACT_L1_ADDRESS,
         args: [],
         abi: rollupAbi,
@@ -268,9 +268,9 @@ class SettlementService extends BaseService {
       )
 
       // @ts-ignore
-      const forwardSettleTxHash = await l1client.writeContract({
+      const forwardSettleTxHash = await l1Client.writeContract({
         abi: forwarderAbi,
-        // account: l1client.account.address,
+        // account: l1Client.account.address,
         address: this.forwarderAddress,
         args: [
           [
@@ -289,7 +289,7 @@ class SettlementService extends BaseService {
       this.logger.info(
         `waiting for forwardSettleToL2 transaction confirmation of ${forwardSettleTxHash} for order ${order.orderId} ...`,
       )
-      await waitForTransactionReceipt(l1client, { hash: forwardSettleTxHash })
+      await waitForTransactionReceipt(l1Client, { hash: forwardSettleTxHash })
 
       this.logger.info(
         `settlement succesfully forwarded to L2 for order ${order.orderId}. tx hash: ${forwardSettleTxHash}`,
