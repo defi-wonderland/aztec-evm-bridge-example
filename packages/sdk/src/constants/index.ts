@@ -17,6 +17,8 @@ export const FILLED_PRIVATELY = 3
 export const AZTEC_VERSION = 3924331020
 export const FORWARDER_SETTLE_ORDER_SLOT = 2n
 export const FORWARDER_REFUNDED_ORDERS_SLOT = 3n
+export const L2_GATEWAY_FILLED_ORDERS_SLOT = 51n
+export const L2_GATEWAY_REFUNDED_ORDERS_SLOT = 52n
 
 export const aztecSepolia: InternalChain = {
   id: 999999,
@@ -42,4 +44,8 @@ export const aztecRollupContractL1Addresses: Record<number, Hex> = {
 
 export const forwarderAddresses: Record<number, Hex> = {
   [sepolia.id]: "0xfbbb6dDb3534A2A8eb7c0eC1ad3abBbc9f694ECd",
+}
+
+export const opStackAnchorRegistryAddresses: Record<number, Hex> = {
+  [sepolia.id]: "0x0729957c92A1F50590A84cb2D65D761093f3f8eB",
 }

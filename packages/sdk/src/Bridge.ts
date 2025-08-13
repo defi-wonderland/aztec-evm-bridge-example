@@ -51,7 +51,10 @@ import {
   FORWARDER_SETTLE_ORDER_SLOT,
   forwarderAddresses,
   gatewayAddresses,
+  L2_GATEWAY_FILLED_ORDERS_SLOT,
+  L2_GATEWAY_REFUNDED_ORDERS_SLOT,
   OPENED,
+  opStackAnchorRegistryAddresses,
   ORDER_DATA_TYPE,
   PRIVATE_ORDER,
   PRIVATE_ORDER_WITH_HOOK,
@@ -68,12 +71,14 @@ import {
 import l2Gateway7683Abi from "./utils/abi/l2Gateway7683"
 import rollupAbi from "./utils/abi/rollup"
 import forwarderAbi from "./utils/abi/forwarder"
+import anchorRegistryAbi from "./utils/abi/anchorRegistry"
 
 import type {
   BridgeConfigs,
   FilledLog,
   FillOrderDetails,
   ForwardDetails,
+  ForwardDetailsInternal,
   InternalChain,
   Order,
   OrderCallbacks,
@@ -81,7 +86,6 @@ import type {
   OrderResult,
   RefundOrderDetails,
   ResolvedOrder,
-  SettleOrderDetails,
 } from "./types"
 
 const AZTEC_WAIT_TIMEOUT = 120000
@@ -192,7 +196,7 @@ export class Bridge {
     throw new Error("Neither chain is Aztec")
   }
 
-  async finalizeForwardRefundOrder(details: RefundOrderDetails): Promise<Hex> {
+  async finalizeForwardRefundOrder(details: ForwardDetails): Promise<Hex> {
     const { chainIdIn, chainIdOut } = details
     if (chainIdOut === aztecSepolia.id) {
       return this.#finalizeForwardToL2({
@@ -205,7 +209,7 @@ export class Bridge {
     throw new Error("Neither chain is Aztec")
   }
 
-  async finalizeForwardSettleOrder(details: SettleOrderDetails): Promise<Hex> {
+  async finalizeForwardSettleOrder(details: ForwardDetails): Promise<Hex> {
     const { chainIdIn, chainIdOut } = details
     if (chainIdOut === aztecSepolia.id) {
       return this.#finalizeForwardToL2({
@@ -218,22 +222,22 @@ export class Bridge {
     throw new Error("Neither chain is Aztec")
   }
 
-  async forwardRefundOrder(details: RefundOrderDetails): Promise<Hex> {
+  async forwardRefundOrder(details: ForwardDetails): Promise<Hex> {
     const { chainIdIn, chainIdOut } = details
     if (chainIdOut === aztecSepolia.id) {
       return this.#forwardToL2({ ...details, type: "forwardRefundToL2" })
     } else if (chainIdIn === aztecSepolia.id) {
-      return this.#forwardRefundOrderToAztec(details)
+      return this.#forwardToAztec({ ...details, type: "forwardRefundToAztec" })
     }
     throw new Error("Neither chain is Aztec")
   }
 
-  async forwardSettleOrder(details: SettleOrderDetails): Promise<Hex> {
+  async forwardSettleOrder(details: ForwardDetails): Promise<Hex> {
     const { chainIdIn, chainIdOut } = details
     if (chainIdOut === aztecSepolia.id) {
       return this.#forwardToL2({ ...details, type: "forwardSettleToL2" })
     } else if (chainIdIn === aztecSepolia.id) {
-      return this.#forwardSettleOrderToAztec(details)
+      return this.#forwardToAztec({ ...details, type: "forwardSettleToAztec" })
     }
     throw new Error("Neither chain is Aztec")
   }
@@ -435,16 +439,16 @@ export class Bridge {
     return receipt.txHash.toString()
   }
 
-  async #finalizeForwardRefundOrderToAztec(details: RefundOrderDetails): Promise<Hex> {
+  async #finalizeForwardRefundOrderToAztec(details: ForwardDetails): Promise<Hex> {
     throw new Error("Not implemented")
   }
 
-  async #finalizeForwardSettleOrderToAztec(details: SettleOrderDetails): Promise<Hex> {
+  async #finalizeForwardSettleOrderToAztec(details: ForwardDetails): Promise<Hex> {
     throw new Error("Not implemented")
   }
 
-  async #finalizeForwardToL2(details: ForwardDetails): Promise<Hex> {
-    const { chainIdForwarder, chainIdIn, chainIdOut, fillerAddress, orderId, type } = details
+  async #finalizeForwardToL2(details: ForwardDetailsInternal): Promise<Hex> {
+    const { chainIdForwarder, chainIdIn, chainIdOut, fillerData, orderId, type } = details
     if (!chainIdForwarder) throw new Error("You must specify a forwarder chain")
     const chainForwarder = this.#getChainByChainId(chainIdForwarder)
     const { chainIn, chainOut } = this.#getChainInAndOutByChainIds(chainIdIn, chainIdOut)
@@ -455,7 +459,7 @@ export class Bridge {
     const message =
       type === "forwardRefundToL2"
         ? [hexToBuffer(REFUND_ORDER_TYPE), hexToBuffer(orderId)]
-        : [hexToBuffer(SETTLE_ORDER_TYPE), hexToBuffer(orderId), hexToBuffer(padHex(fillerAddress!))]
+        : [hexToBuffer(SETTLE_ORDER_TYPE), hexToBuffer(orderId), hexToBuffer(padHex(fillerData!))]
     const messageHash = sha256ToField(message)
 
     const { parentBeaconBlockRoot: beaconRoot, timestamp: beaconOracleTimestamp } = await createPublicClient({
@@ -518,8 +522,76 @@ export class Bridge {
     })
   }
 
-  async #forwardToL2(details: ForwardDetails): Promise<Hex> {
-    const { chainIdForwarder, chainIdIn, chainIdOut, fillerAddress, orderId, type } = details
+  async #forwardToAztec(details: ForwardDetailsInternal): Promise<Hex> {
+    const { chainIdForwarder, chainIdIn, chainIdOut, fillerData, fillTransactionHash, orderId, originData, type } =
+      details
+    if (!originData || !fillerData || !fillTransactionHash) {
+      // TODO: add indexed to Filled.orderId log and search the Filled log by the orderId
+      throw new Error("You must specify originData, fillerData and fillTransactionHash")
+    }
+    if (!chainIdForwarder) throw new Error("You must set a value for chainForwarder")
+    const chainForwarder = this.#getChainByChainId(chainIdForwarder) as Chain
+    const chainOut = this.#getChainByChainId(chainIdOut) as Chain
+    const { gatewayOut } = this.#getGatewaysByChainIds(chainIdIn, chainIdOut)
+
+    const forwarderAddress = forwarderAddresses[chainForwarder.id]
+    if (!forwarderAddress) throw new Error("Forwarder chain not supported")
+    const opStackAnchorRegistryAddress = opStackAnchorRegistryAddresses[chainIdForwarder]
+    if (!opStackAnchorRegistryAddress) throw new Error("Invalid chainForwarder")
+
+    const [_, l2EvmAnchorRootblockNumber] = (await createPublicClient({
+      chain: chainForwarder,
+      transport: http(),
+    }).readContract({
+      abi: anchorRegistryAbi,
+      functionName: "getAnchorRoot",
+      args: [],
+      address: opStackAnchorRegistryAddress,
+    })) as [`0x${string}`, bigint]
+
+    const l2EvmClient = createPublicClient({
+      chain: chainOut,
+      transport: http(),
+    })
+
+    const receipt = await l2EvmClient.getTransactionReceipt({ hash: fillTransactionHash as `0x${string}` })
+    if (receipt.blockNumber > l2EvmAnchorRootblockNumber) {
+      throw new Error(
+        `cannot forward to Aztec for order ${orderId} because the corresponding block number ${receipt.blockNumber} is > than the anchor root one ${l2EvmAnchorRootblockNumber} ...`,
+      )
+    }
+
+    const storageKey = keccak256(
+      encodeAbiParameters(
+        [{ type: "bytes32" }, { type: "uint256" }],
+        [orderId, type === "forwardSettleToAztec" ? L2_GATEWAY_FILLED_ORDERS_SLOT : L2_GATEWAY_REFUNDED_ORDERS_SLOT],
+      ),
+    )
+    const proof = await l2EvmClient.request({
+      method: "eth_getProof",
+      params: [gatewayOut, [storageKey], `0x${l2EvmAnchorRootblockNumber.toString(16)}`],
+    })
+
+    const accountProofParameters = {
+      storageKey: proof.storageProof[0]!.key,
+      storageValue: proof.storageProof[0]!.value,
+      accountProof: proof.accountProof,
+      storageProof: proof.storageProof[0]!.proof,
+    }
+
+    const { walletClient, address } = await this.#getEvmWalletClientAndAddress(chainForwarder)
+    return await walletClient.writeContract({
+      abi: forwarderAbi,
+      account: this.evmPrivateKey ? walletClient.account! : address,
+      address: forwarderAddress,
+      args: [orderId, originData, fillerData, accountProofParameters],
+      chain: chainForwarder,
+      functionName: type === "forwardSettleToAztec" ? "forwardSettleToAztec" : "forwardRefundToAztec",
+    })
+  }
+
+  async #forwardToL2(details: ForwardDetailsInternal): Promise<Hex> {
+    const { chainIdForwarder, chainIdIn, chainIdOut, fillerData, orderId, type } = details
     if (!chainIdForwarder) throw new Error("You must specify a forwarder chain")
     const chainForwarder = this.#getChainByChainId(chainIdForwarder) as Chain
     const { gatewayOut } = this.#getGatewaysByChainIds(chainIdIn, chainIdOut)
@@ -531,7 +603,7 @@ export class Bridge {
     const message =
       type === "forwardRefundToL2"
         ? [hexToBuffer(REFUND_ORDER_TYPE), hexToBuffer(orderId)]
-        : [hexToBuffer(SETTLE_ORDER_TYPE), hexToBuffer(orderId), hexToBuffer(padHex(fillerAddress!))]
+        : [hexToBuffer(SETTLE_ORDER_TYPE), hexToBuffer(orderId), hexToBuffer(padHex(fillerData!))]
     const messageHash = sha256ToField(message)
 
     const l2ToL1MessageHash = computeL2ToL1MessageHash({
@@ -599,14 +671,6 @@ export class Bridge {
       chain: chainForwarder,
       functionName: type === "forwardRefundToL2" ? "forwardRefundToL2" : "forwardSettleToL2",
     })
-  }
-
-  async #forwardRefundOrderToAztec(details: RefundOrderDetails): Promise<Hex> {
-    throw new Error("Not implemented")
-  }
-
-  async #forwardSettleOrderToAztec(details: SettleOrderDetails): Promise<Hex> {
-    throw new Error("Not implemented")
   }
 
   async #getAztecWallet() {

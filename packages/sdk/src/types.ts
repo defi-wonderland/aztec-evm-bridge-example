@@ -1,6 +1,6 @@
-import { Chain, Hex } from "viem"
-import { PXE } from "@aztec/aztec.js"
-import { AzguardClient } from "@azguardwallet/client"
+import type { Chain, Hex } from "viem"
+import type { PXE } from "@aztec/aztec.js"
+import type { AzguardClient } from "@azguardwallet/client"
 
 export type FilledLog = {
   orderId: `0x${string}`
@@ -91,13 +91,31 @@ export interface RefundOrderDetails {
   chainIdForwarder?: number
 }
 
-export type SettleOrderDetails = RefundOrderDetails & {
-  fillerAddress: Hex
+export type ForwardToAztecDetails = {
+  orderId: Hex
+  chainIdIn: number
+  chainIdOut: number
+  chainIdForwarder?: number
+  fillerData?: Hex
 }
 
-export type ForwardDetails = RefundOrderDetails & {
-  fillerAddress?: Hex
-  type: "forwardSettleToL2" | "forwardRefundToL2"
+export type ForwardDetails = {
+  orderId: Hex
+  chainIdIn: number
+  chainIdOut: number
+  chainIdForwarder?: number
+  fillerData?: Hex
+  originData?: Hex
+  fillTransactionHash?: Hex
+}
+
+export type ForwardDetailsInternal = ForwardDetails & {
+  orderId: Hex
+  chainIdIn: number
+  chainIdOut: number
+  chainIdForwarder?: number
+  fillerData?: Hex
+  type: "forwardSettleToL2" | "forwardRefundToL2" | "forwardSettleToAztec" | "forwardRefundToAztec"
 }
 
 export interface OrderResult {
