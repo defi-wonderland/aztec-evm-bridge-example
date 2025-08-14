@@ -547,14 +547,14 @@ export class Bridge {
       functionName: "getAnchorRoot",
       args: [],
       address: opStackAnchorRegistryAddress,
-    })) as [`0x${string}`, bigint]
+    })) as [Hex, bigint]
 
     const l2EvmClient = createPublicClient({
       chain: chainOut,
       transport: http(),
     })
 
-    const receipt = await l2EvmClient.getTransactionReceipt({ hash: fillTransactionHash as `0x${string}` })
+    const receipt = await l2EvmClient.getTransactionReceipt({ hash: fillTransactionHash })
     if (receipt.blockNumber > l2EvmAnchorRootblockNumber) {
       throw new Error(
         `cannot forward to Aztec for order ${orderId} because the corresponding block number ${receipt.blockNumber} is > than the anchor root one ${l2EvmAnchorRootblockNumber} ...`,
