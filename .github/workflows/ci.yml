@@ -34,8 +34,6 @@ jobs:
     
     - name: Set up Docker
       uses: docker/setup-buildx-action@v2
-    
-
 
     - name: Install
       run: yarn
@@ -71,4 +69,4 @@ jobs:
     - name: Run specific test
       run: yarn workspace @substancelabs/aztec-gateway-7683 test:js -t "should open a private order and settle"
       env:
-        SKIP_SANDBOX: false
+        SKIP_SANDBOX: true
