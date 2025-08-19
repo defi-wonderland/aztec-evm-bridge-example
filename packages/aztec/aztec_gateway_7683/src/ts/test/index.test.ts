@@ -1,5 +1,5 @@
 import { Fr, PXE, EthAddress, SponsoredFeePaymentMethod, Contract } from "@aztec/aztec.js"
-import { spawn } from "child_process"
+import { ChildProcess, spawn } from "child_process"
 import { createEthereumChain, createExtendedL1Client, RollupContract } from "@aztec/ethereum"
 import { hexToBytes, padHex } from "viem"
 import { poseidon2Hash, sha256ToField } from "@aztec/foundation/crypto"
@@ -34,7 +34,7 @@ const FILL_DEADLINE = 2 ** 32 - 1
 const DESTINATION_SETTLER_EVM_L2 = EthAddress.ZERO
 const DATA = "0x5555555555555555555555555555555555555555555555555555555555555555"
 
-// const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const setup = async (pxes: PXE[]) => {
   const [pxe1, pxe2, pxe3] = pxes
@@ -118,20 +118,20 @@ const setup = async (pxes: PXE[]) => {
 // NOTE: before running the tests comment all occurences of context.consume_l1_to_l2_message
 describe("AztecGateway7683", () => {
   let pxes: PXE[]
-  let sandboxInstance
+  let sandboxInstance: ChildProcess
   let skipSandbox: boolean
   let publicClient: any
   let version: bigint
 
   beforeAll(async () => {
     skipSandbox = process.env.SKIP_SANDBOX === "true"
-    /*if (!skipSandbox) {
+    if (!skipSandbox) {
       sandboxInstance = spawn("aztec", ["start", "--sandbox"], {
         detached: true,
         stdio: "ignore",
       })
       await sleep(15000)
-    }*/
+    }
     pxes = await getPXEs(["pxe1", "pxe2", "pxe3"])
     const nodeInfo = await pxes[0].getNodeInfo()
     const chain = createEthereumChain(["http://localhost:8545"], nodeInfo.l1ChainId)
@@ -143,7 +143,7 @@ describe("AztecGateway7683", () => {
 
   afterAll(async () => {
     if (!skipSandbox) {
-      sandboxInstance!.kill("SIGINT")
+      sandboxInstance.kill("SIGINT")
     }
   })
 

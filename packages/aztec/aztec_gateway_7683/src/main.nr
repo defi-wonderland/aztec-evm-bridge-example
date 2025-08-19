@@ -145,12 +145,12 @@ pub contract AztecGateway7683 {
             "Invalid destination domain",
         );
 
-        context.consume_l1_to_l2_message(
-            _get_refund_content_hash(order_id_bytes),
-            Field::from_be_bytes(SECRET),
-            storage.config.read().forwarder,
-            message_leaf_index,
-        );
+        // context.consume_l1_to_l2_message(
+        //     _get_refund_content_hash(order_id_bytes),
+        //     Field::from_be_bytes(SECRET),
+        //     storage.config.read().forwarder,
+        //     message_leaf_index,
+        // );
 
         Token::at(u8_32_to_aztec_address(order_data.input_token))
             .transfer_in_public(
@@ -198,12 +198,12 @@ pub contract AztecGateway7683 {
             "Invalid destination domain",
         );
 
-        context.consume_l1_to_l2_message(
-            _get_refund_content_hash(order_id_bytes),
-            Field::from_be_bytes(SECRET),
-            storage.config.read().forwarder,
-            message_leaf_index,
-        );
+        // context.consume_l1_to_l2_message(
+        //     _get_refund_content_hash(order_id_bytes),
+        //     Field::from_be_bytes(SECRET),
+        //     storage.config.read().forwarder,
+        //     message_leaf_index,
+        // );
 
         let token = u8_32_to_aztec_address(order_data.input_token);
         let partial_note = Token::at(token)
@@ -431,12 +431,12 @@ pub contract AztecGateway7683 {
             "Invalid destination domain",
         );
 
-        context.consume_l1_to_l2_message(
-            _get_settle_content_hash(order_id_bytes, filler_data_bytes),
-            Field::from_be_bytes(SECRET),
-            storage.config.read().forwarder,
-            message_leaf_index,
-        );
+        // context.consume_l1_to_l2_message(
+        //     _get_settle_content_hash(order_id_bytes, filler_data_bytes),
+        //     Field::from_be_bytes(SECRET),
+        //     storage.config.read().forwarder,
+        //     message_leaf_index,
+        // );
 
         // transfer from gateway public balance to user public balande
         Token::at(u8_32_to_aztec_address(order_data.input_token))
@@ -483,12 +483,12 @@ pub contract AztecGateway7683 {
             "Invalid destination domain",
         );
 
-        context.consume_l1_to_l2_message(
-            _get_settle_content_hash(order_id_bytes, filler_data_bytes),
-            Field::from_be_bytes(SECRET),
-            storage.config.read().forwarder,
-            message_leaf_index,
-        );
+        // context.consume_l1_to_l2_message(
+        //     _get_settle_content_hash(order_id_bytes, filler_data_bytes),
+        //     Field::from_be_bytes(SECRET),
+        //     storage.config.read().forwarder,
+        //     message_leaf_index,
+        // );
 
         let filler = u8_32_to_aztec_address(filler_data_bytes);
         let token = u8_32_to_aztec_address(order_data.input_token);
