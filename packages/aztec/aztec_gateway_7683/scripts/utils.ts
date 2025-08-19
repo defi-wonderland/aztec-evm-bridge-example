@@ -5,6 +5,7 @@ import { getSchnorrAccount, SchnorrAccountContractArtifact } from "@aztec/accoun
 import { deriveSigningKey } from "@aztec/stdlib/keys"
 import { getSponsoredFPCInstance } from "./fpc.js"
 import { SponsoredFPCContractArtifact } from "@aztec/noir-contracts.js/SponsoredFPC"
+import { rmSync } from "fs"
 
 export const getPXEs = async (names: string[]): Promise<PXE[]> => {
   const url = "http://localhost:8080"
@@ -16,6 +17,7 @@ export const getPXEs = async (names: string[]): Promise<PXE[]> => {
     proverEnabled: false,
   }
 
+  rmSync(`store`, { recursive: true, force: true })
   const pxes: PXE[] = []
   for (const name of names) {
     const store = await createStore(name, {
