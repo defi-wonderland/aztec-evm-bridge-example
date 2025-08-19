@@ -34,6 +34,9 @@ jobs:
     
     - name: Enable Corepack
       run: corepack enable
+
+    - name: Install
+      run: yarn
     
     - name: Install Aztec CLI
       run: |
@@ -45,7 +48,7 @@ jobs:
     
     - name: Set Aztec version
       run: |
-        VERSION=${{ env.AZTEC_VERSION }} aztec-up
+        aztec-up ${{ env.AZTEC_VERSION }}
     
     - name: Install dependencies
       run: yarn install --frozen-lockfile
@@ -53,11 +56,6 @@ jobs:
     - name: Start Aztec Sandbox
       run: |
         aztec start --sandbox &
-        echo "Waiting for sandbox to be ready..."
-        timeout 120s bash -c 'until curl -f http://localhost:8080/status >/dev/null 2>&1; do sleep 2; done'
-        echo "Sandbox is ready"
-      env:
-        AZTEC_PORT: 8080
     
     - name: Clean
       run: yarn workspace @substancelabs/aztec-gateway-7683 clean
@@ -66,10 +64,9 @@ jobs:
       run: yarn workspace @substancelabs/aztec-gateway-7683 compile
     
     - name: Codegen
-      run: yarn workspace @substancelabs/aztec-gateway-7683 codegen
+      run: yarn workspace @substancelabs/aztec-gateway-7683 codegen -f
     
     - name: Run specific test
       run: yarn workspace @substancelabs/aztec-gateway-7683 test:js -t "should open a private order and settle"
       env:
-        NODE_OPTIONS: --max-old-space-size=4096
         SKIP_SANDBOX: false
