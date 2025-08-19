@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     
     env:
-      SKIP_SANDBOX: "true"
+      SKIP_SANDBOX: "false"
     
     strategy:
       matrix:
@@ -56,9 +56,9 @@ jobs:
     - name: Install dependencies
       run: yarn install --frozen-lockfile
     
-    - name: Start Aztec Sandbox
-      run: |
-        aztec start --sandbox &
+    # - name: Start Aztec Sandbox
+    #   run: |
+    #     aztec start --sandbox &
     
     - name: Clean
       run: yarn workspace @substancelabs/aztec-gateway-7683 clean
