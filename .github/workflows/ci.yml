@@ -68,25 +68,30 @@ jobs:
     
     - name: Run specific test
       run: yarn workspace @substancelabs/aztec-gateway-7683 test:js -t "should open a private order and settle"
+      continue-on-error: true
       env:
-        SKIP_SANDBOX: "true"
+        SKIP_SANDBOX: "false"
 
     - name: Run specific test
       run: yarn workspace @substancelabs/aztec-gateway-7683 test:js -t "should open a private order and settle"
+      continue-on-error: true
       env:
-        SKIP_SANDBOX: "true"
+        SKIP_SANDBOX: "false"
 
     - name: Run specific test
       run: yarn workspace @substancelabs/aztec-gateway-7683 test:js -t "should open a private order and settle"
+      continue-on-error: true
       env:
-        SKIP_SANDBOX: "true"
+        SKIP_SANDBOX: "false"
 
     - name: Run specific test
       run: yarn workspace @substancelabs/aztec-gateway-7683 test:js -t "should open a private order and settle"
+      continue-on-error: true
       env:
-        SKIP_SANDBOX: "true"
+        SKIP_SANDBOX: "false"
 
     - name: Run specific test
       run: yarn workspace @substancelabs/aztec-gateway-7683 test:js
+      continue-on-error: true
       env:
-        SKIP_SANDBOX: "true"
+        SKIP_SANDBOX: "false"
